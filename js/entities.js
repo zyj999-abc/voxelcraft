@@ -38,6 +38,29 @@ function mobFaceTexture(type) {
     ctx.fillStyle = "#e6d8c8"; ctx.fillRect(0, 0, 32, 32);
     ctx.fillStyle = "#1c1c1c"; ctx.fillRect(4, 12, 6, 5); ctx.fillRect(22, 12, 6, 5);
     ctx.fillStyle = "#c8a888"; ctx.fillRect(12, 22, 8, 6);
+  } else if (type === "cow") {
+    ctx.fillStyle = "#5c4033"; ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = "#e8e0d8"; ctx.fillRect(0, 20, 32, 12);                            // 白鼻
+    ctx.fillStyle = "#1c1c1c"; ctx.fillRect(4, 10, 6, 5); ctx.fillRect(22, 10, 6, 5);
+    ctx.fillStyle = "#c8a888"; ctx.fillRect(12, 24, 8, 6);
+    ctx.fillStyle = "#4a352b"; ctx.fillRect(0, 0, 10, 6); ctx.fillRect(22, 0, 10, 6);  // 角斑
+  } else if (type === "chicken") {
+    ctx.fillStyle = "#f0f0f0"; ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = "#1c1c1c"; ctx.fillRect(5, 10, 6, 6); ctx.fillRect(21, 10, 6, 6);
+    ctx.fillStyle = "#e8a020"; ctx.fillRect(11, 18, 10, 6);                            // 喙
+    ctx.fillStyle = "#c03028"; ctx.fillRect(13, 24, 6, 6);                             // 肉垂
+  } else if (type === "skeleton") {
+    ctx.fillStyle = "#d8d8d8"; ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = "#3a3a3a"; ctx.fillRect(5, 10, 8, 7); ctx.fillRect(19, 10, 8, 7);  // 眼窝
+    ctx.fillStyle = "#8a8a8a"; ctx.fillRect(14, 17, 4, 4);                             // 鼻孔
+    ctx.fillStyle = "#1c1c1c"; ctx.fillRect(8, 24, 16, 3);                             // 牙缝
+    ctx.fillStyle = "#b8b8b8"; for (let i = 8; i < 24; i += 4) ctx.fillRect(i, 24, 1, 3);
+  } else if (type === "creeper") {
+    ctx.fillStyle = "#48a048"; ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = "#0a1c0a";                                                          // 标志脸
+    ctx.fillRect(4, 8, 8, 10); ctx.fillRect(20, 8, 8, 10);                              // 眼
+    ctx.fillRect(12, 16, 8, 8);                                                         // 嘴心
+    ctx.fillRect(8, 20, 4, 8); ctx.fillRect(20, 20, 4, 8);                              // 嘴角下垂
   } else { // zombie
     ctx.fillStyle = "#4a7a3a"; ctx.fillRect(0, 0, 32, 32);
     ctx.fillStyle = "#0a0a0a"; ctx.fillRect(4, 10, 8, 5); ctx.fillRect(20, 10, 8, 5);
@@ -62,8 +85,16 @@ const MOB_DEFS = {
     skin: "#eda3a0", drops: [{ id: I.PORKCHOP, min: 1, max: 3 }] },
   sheep: { w: 0.9, h: 1.15, hp: 8, speed: 0.9, hostile: false, model: "quad",
     skin: "#e8e8e8", drops: [{ id: B.WOOL, min: 1, max: 2 }] },
-  zombie: { w: 0.6, h: 1.9, hp: 20, speed: 2.4, hostile: true, damage: 3,
+  cow: { w: 0.9, h: 1.3, hp: 10, speed: 0.9, hostile: false, model: "quad",
+    skin: "#5c4033", drops: [{ id: I.BEEF, min: 1, max: 3 }, { id: I.LEATHER, min: 0, max: 2 }] },
+  chicken: { w: 0.45, h: 0.7, hp: 4, speed: 1.1, hostile: false, model: "bird",
+    skin: "#f0f0f0", drops: [{ id: I.CHICKEN_RAW, min: 1, max: 1 }, { id: I.FEATHER, min: 0, max: 2 }] },
+  zombie: { w: 0.6, h: 1.9, hp: 20, speed: 2.4, hostile: true, damage: 3, undead: true,
     model: "human", skin: "#4a7a3a", drops: [{ id: I.APPLE, min: 1, max: 1, chance: 0.1 }] },
+  skeleton: { w: 0.6, h: 1.9, hp: 20, speed: 2.2, hostile: true, damage: 2, undead: true, ranged: true,
+    model: "human", skin: "#d8d8d8", drops: [{ id: I.BONE, min: 0, max: 2 }, { id: I.ARROW, min: 0, max: 2 }] },
+  creeper: { w: 0.6, h: 1.6, hp: 20, speed: 2.2, hostile: true, damage: 0, explodes: true,
+    model: "creeper", skin: "#48a048", drops: [{ id: I.COAL, min: 0, max: 2 }] },
 };
 
 // ==================== 掉落物 ====================
@@ -198,34 +229,96 @@ class Mob {
   buildModel() {
     const g = new THREE.Group();
     const sky = G.sky;
-    if (this.def.model === "quad") {
+    if (this.def.model === "quad" || this.def.model === "bird") {
+      const isBird = this.def.model === "bird";
+      const scale = isBird ? 0.5 : 1;
       const skin = mobSkinTexture(this.mtype + "_skin", this.def.skin, 0.18);
       const face = mobFaceTexture(this.mtype);
       const mSkin = mobMaterial(sky, this.mtype + "_skin", skin);
       const mFace = mobMaterial(sky, this.mtype + "_face", face);
       const bodyMat = [mSkin, mSkin, mSkin, mSkin, mSkin, mSkin];
 
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.55, 0.95), bodyMat);
-      body.position.y = 0.62;
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.62 * scale, 0.55 * scale, 0.95 * scale), bodyMat);
+      body.position.y = isBird ? 0.45 : 0.62;
       g.add(body);
 
       const headMats = [mSkin, mSkin, mSkin, mSkin, mFace, mSkin];
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.4), headMats);
-      head.position.set(0, 0.72, 0.62);
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.45 * scale, 0.45 * scale, 0.4 * scale), headMats);
+      head.position.set(0, isBird ? 0.62 : 0.72, 0.62 * scale);
+      g.add(head);
+
+      if (isBird) {
+        // 橙色喙
+        const beak = new THREE.Mesh(
+          new THREE.BoxGeometry(0.1, 0.1, 0.18),
+          new THREE.MeshBasicMaterial({ color: 0xe8a020 }));
+        beak.position.set(0, 0.6, 0.42);
+        g.add(beak);
+        // 红色肉垂
+        const wattle = new THREE.Mesh(
+          new THREE.BoxGeometry(0.1, 0.12, 0.1),
+          new THREE.MeshBasicMaterial({ color: 0xc03028 }));
+        wattle.position.set(0, 0.5, 0.34);
+        g.add(wattle);
+        // 翅膀
+        const wingGeo = new THREE.BoxGeometry(0.06, 0.24, 0.4);
+        this.wings = [];
+        for (const side of [-1, 1]) {
+          const wing = new THREE.Mesh(wingGeo, bodyMat);
+          wing.position.set(side * 0.17, 0.45, 0);
+          g.add(wing);
+          this.wings.push(wing);
+        }
+      }
+
+      this.legs = [];
+      const legH = isBird ? 0.22 : 0.38;
+      const legGeo = new THREE.BoxGeometry(0.18 * scale, legH, 0.18 * scale);
+      const legMat = isBird
+        ? new THREE.MeshBasicMaterial({ color: 0xe8a020 })
+        : bodyMat;
+      const legPositions = isBird
+        ? [[-0.09, 0.11], [0.09, 0.11]]
+        : [[-0.2, 0.32], [0.2, 0.32], [-0.2, -0.32], [0.2, -0.32]];
+      for (const [lx, lz] of legPositions) {
+        const leg = new THREE.Mesh(legGeo, legMat);
+        leg.position.set(lx, legH / 2, lz);
+        g.add(leg);
+        this.legs.push(leg);
+      }
+      this.head = head;
+      this.body = body;
+    } else if (this.def.model === "creeper") {
+      const skin = mobSkinTexture(this.mtype + "_skin", this.def.skin, 0.22);
+      const face = mobFaceTexture(this.mtype);
+      const mSkin = mobMaterial(sky, this.mtype + "_skin", skin);
+      const mFace = mobMaterial(sky, this.mtype + "_face", face);
+      const bodyMat = [mSkin, mSkin, mSkin, mSkin, mSkin, mSkin];
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.85, 0.3), bodyMat);
+      body.position.y = 0.75;
+      g.add(body);
+
+      const headMats = [mSkin, mSkin, mSkin, mSkin, mFace, mSkin];
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMats);
+      head.position.y = 1.42;
       g.add(head);
 
       this.legs = [];
-      const legGeo = new THREE.BoxGeometry(0.18, 0.38, 0.18);
-      for (const [lx, lz] of [[-0.2, 0.32], [0.2, 0.32], [-0.2, -0.32], [0.2, -0.32]]) {
+      const legGeo = new THREE.BoxGeometry(0.22, 0.33, 0.3);
+      for (const [lx, lz] of [[-0.14, 0.18], [0.14, 0.18], [-0.14, -0.18], [0.14, -0.18]]) {
         const leg = new THREE.Mesh(legGeo, bodyMat);
-        leg.position.set(lx, 0.19, lz);
+        leg.position.set(lx, 0.165, lz);
         g.add(leg);
         this.legs.push(leg);
       }
       this.head = head;
       this.body = body;
     } else {
-      // 人形 (僵尸)
+      // 人形 (僵尸/骷髅)
+      const isSkel = this.mtype === "skeleton";
       const skin = mobSkinTexture(this.mtype + "_skin", this.def.skin, 0.15);
       const face = mobFaceTexture(this.mtype);
       const mSkin = mobMaterial(sky, this.mtype + "_skin", skin);
@@ -242,16 +335,17 @@ class Mob {
       g.add(head);
 
       this.arms = [];
-      const armGeo = new THREE.BoxGeometry(0.18, 0.62, 0.18);
+      const armGeo = new THREE.BoxGeometry(0.18, isSkel ? 0.62 : 0.62, 0.18);
       for (const side of [-1, 1]) {
         const arm = new THREE.Mesh(armGeo, bodyMat);
         arm.position.set(side * 0.35, 1.32, 0.05);
-        arm.rotation.x = -Math.PI / 2 + 0.15;
+        // 骷髅持弓姿态: 手臂平举向前
+        arm.rotation.x = isSkel ? -Math.PI / 2 - 0.35 : -Math.PI / 2 + 0.15;
         g.add(arm);
         this.arms.push(arm);
       }
       this.legs = [];
-      const legGeo = new THREE.BoxGeometry(0.2, 0.72, 0.2);
+      const legGeo = new THREE.BoxGeometry(isSkel ? 0.14 : 0.2, 0.72, isSkel ? 0.14 : 0.2);
       for (const side of [-1, 1]) {
         const leg = new THREE.Mesh(legGeo, bodyMat);
         leg.position.set(side * 0.13, 0.36, 0);
@@ -288,20 +382,32 @@ class Mob {
     }
     if (!this.def.hostile) { this.state = "flee"; this.stateTimer = 4; }
     else { this.state = "chase"; }
-    if (this.mtype === "pig") Sound.pigOink();
-    else if (this.mtype === "sheep") Sound.sheepBaa();
-    else Sound.zombieGroan();
+    this.mobSound();
     if (this.hp <= 0) this.die();
+  }
+
+  mobSound() {
+    switch (this.mtype) {
+      case "pig": Sound.pigOink(); break;
+      case "sheep": Sound.sheepBaa(); break;
+      case "cow": Sound.cowMoo(); break;
+      case "chicken": Sound.chickenCluck(); break;
+      case "skeleton": Sound.skeletonRattle(); break;
+      case "creeper": break;
+      default: Sound.zombieGroan();
+    }
   }
 
   die() {
     this.dead = true;
     // 掉落
-    for (const d of this.def.drops) {
-      const chance = d.chance === undefined ? 1 : d.chance;
-      if (Math.random() < chance) {
-        const count = d.min + Math.floor(Math.random() * (d.max - d.min + 1));
-        if (count > 0) this.mgr.spawnDrop(this.pos.x, this.pos.y + 0.4, this.pos.z, d.id, count);
+    if (!this.noDrop) {
+      for (const d of this.def.drops) {
+        const chance = d.chance === undefined ? 1 : d.chance;
+        if (Math.random() < chance) {
+          const count = d.min + Math.floor(Math.random() * (d.max - d.min + 1));
+          if (count > 0) this.mgr.spawnDrop(this.pos.x, this.pos.y + 0.4, this.pos.z, d.id, count);
+        }
       }
     }
     this.mgr.particles.burstSmoke(this.pos.x, this.pos.y + this.h / 2, this.pos.z, 10);
@@ -317,8 +423,8 @@ class Mob {
     const distP = player ? dist3(this.pos, player.pos) : 999;
     const daylight = G.sky ? G.sky.daylight : 1;
 
-    // 僵尸白天燃烧
-    if (this.def.hostile && daylight > 0.75 && this.pos.y >= 50) {
+    // 亡灵白天燃烧 (僵尸/骷髅)
+    if (this.def.undead && daylight > 0.75 && this.pos.y >= 50) {
       const skyVisible = this.checkSkyVisible();
       if (skyVisible) {
         this.burning = true;
@@ -331,11 +437,7 @@ class Mob {
     // 环境音
     if (this.soundTimer <= 0) {
       this.soundTimer = 6 + Math.random() * 10;
-      if (distP < 18) {
-        if (this.mtype === "pig") Sound.pigOink();
-        else if (this.mtype === "sheep") Sound.sheepBaa();
-        else if (distP < 14) Sound.zombieGroan();
-      }
+      if (distP < 18 && this.mtype !== "creeper") this.mobSound();
     }
 
     // ===== AI =====
@@ -350,11 +452,34 @@ class Mob {
         // 朝向玩家
         const dx = player.pos.x - this.pos.x, dz = player.pos.z - this.pos.z;
         this.yaw = Math.atan2(dx, dz);
-        this.moveDir = 1;
-        // 攻击
-        if (distP < 1.7 && this.attackCd <= 0) {
-          this.attackCd = 1.0;
-          player.hurt(this.def.damage, this.pos);
+
+        if (this.def.ranged) {
+          // 骷髅: 保持距离射箭
+          if (distP > 11) this.moveDir = 1;
+          else if (distP < 6) this.moveDir = -0.7;
+          else this.moveDir = 0;
+          if (this.attackCd <= 0 && distP < 16) {
+            this.attackCd = 2.2;
+            this.shootArrowAt(player);
+          }
+        } else if (this.def.explodes) {
+          // 苦力怕: 追近后点燃引信
+          this.moveDir = distP > 2.2 ? 1 : 0;
+          if (distP < 2.9) {
+            if (this.fuse === undefined || this.fuse <= 0) {
+              this.fuse = 1.5;
+              Sound.creeperHiss();
+            }
+          } else if (distP > 5.5 && this.fuse > 0) {
+            this.fuse = 0;   // 玩家逃离, 取消
+          }
+        } else {
+          // 僵尸近战
+          this.moveDir = 1;
+          if (distP < 1.7 && this.attackCd <= 0) {
+            this.attackCd = 1.0;
+            player.hurt(this.def.damage, this.pos);
+          }
         }
       } else this.wanderTick(dt);
     } else {
@@ -367,6 +492,25 @@ class Mob {
       } else this.wanderTick(dt);
     }
 
+    // 苦力怕引信计时
+    if (this.fuse > 0) {
+      this.fuse -= dt;
+      // 闪烁 + 膨胀
+      const k = 1 - this.fuse / 1.5;
+      this.flashMesh.visible = Math.sin(k * 40) > 0;
+      this.mesh.scale.setScalar(1 + k * 0.35);
+      if (Math.random() < dt * 20) this.mgr.particles.burstSmoke(this.pos.x, this.pos.y + 1, this.pos.z, 1, "#ffffff");
+      if (this.fuse <= 0) {
+        // 爆炸!
+        this.noDrop = true;
+        this.dead = true;
+        this.mgr.explode(this.pos.x, this.pos.y + 0.8, this.pos.z, 3.2);
+        return;
+      }
+    } else {
+      this.mesh.scale.setScalar(1);
+    }
+
     // ===== 移动与物理 =====
     const mx = Math.sin(this.yaw) * this.moveDir * speed;
     const mz = Math.cos(this.yaw) * this.moveDir * speed;
@@ -377,6 +521,8 @@ class Mob {
     const inWater = entityInWater(this.mgr.world, this, 0.4);
     if (inWater) {
       this.vel.y += (1.5 - this.vel.y) * Math.min(1, 3 * dt);  // 浮起
+    } else if (this.mtype === "chicken" && this.vel.y < 0 && !this.onGround) {
+      this.vel.y += GRAVITY * 0.6 * dt;   // 鸡缓降(扇翅)
     } else {
       this.vel.y -= GRAVITY * dt;
     }
@@ -405,9 +551,14 @@ class Mob {
         leg.rotation.x = Math.sin(this.walkPhase + (i % 2) * Math.PI) * swing;
       });
     }
+    if (this.wings) {
+      const flap = this.onGround ? Math.sin(this.walkPhase * 2) * 0.1 : Math.sin(this.age || performance.now() * 0.02) * 0.9;
+      this.wings.forEach((wing, i) => { wing.rotation.z = (i === 0 ? 1 : -1) * flap; });
+    }
     if (this.arms) {
+      const baseRot = this.mtype === "skeleton" ? -Math.PI / 2 - 0.35 : -Math.PI / 2 + 0.15;
       this.arms.forEach((arm, i) => {
-        arm.rotation.x = -Math.PI / 2 + 0.15 + Math.sin(this.walkPhase * 0.7 + i * Math.PI) * 0.18;
+        arm.rotation.x = baseRot + Math.sin(this.walkPhase * 0.7 + i * Math.PI) * 0.18;
       });
     }
     this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
@@ -417,6 +568,27 @@ class Mob {
     if (this.burning && Math.random() < dt * 4) {
       this.mgr.particles.burstFlame(this.pos.x, this.pos.y + this.h * 0.5, this.pos.z, 1);
     }
+  }
+
+  // 骷髅射箭: 有视线才发射
+  shootArrowAt(player) {
+    const eye = { x: this.pos.x, y: this.pos.y + this.h * 0.85, z: this.pos.z };
+    const target = { x: player.pos.x, y: player.pos.y + 1.2, z: player.pos.z };
+    const dx = target.x - eye.x, dy = target.y - eye.y, dz = target.z - eye.z;
+    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const dir = { x: dx / dist, y: dy / dist, z: dz / dist };
+    // 视线检测
+    const hit = raycastVoxel(this.mgr.world, eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, dist);
+    if (hit && hit.dist < dist - 0.6) return;
+    // 抬枪补偿重力
+    dir.y += dist * 0.018;
+    const dlen = Math.sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    dir.x /= dlen; dir.y /= dlen; dir.z /= dlen;
+    const jitter = 0.04;
+    dir.x += (Math.random() - 0.5) * jitter;
+    dir.y += (Math.random() - 0.5) * jitter;
+    dir.z += (Math.random() - 0.5) * jitter;
+    this.mgr.spawnArrow(eye.x + dir.x * 0.5, eye.y, eye.z + dir.z * 0.5, dir, 18, false);
   }
 
   wanderTick(dt) {
@@ -480,6 +652,113 @@ class PrimedTNT {
       this.mgr.explode(this.pos.x + 0.5, this.pos.y + 0.5, this.pos.z + 0.5, 4.2);
     }
   }
+  dispose() { this.mgr.scene.remove(this.mesh); }
+}
+
+// ==================== 箭矢 ====================
+class Arrow {
+  constructor(mgr, x, y, z, dir, speed, fromPlayer) {
+    this.mgr = mgr;
+    this.type = "arrow";
+    this.pos = { x, y, z };
+    this.vel = { x: dir.x * speed, y: dir.y * speed, z: dir.z * speed };
+    this.w = 0.12; this.h = 0.12;
+    this.age = 0;
+    this.stuck = false;
+    this.dead = false;
+    this.fromPlayer = fromPlayer;
+    this.damageDone = false;
+
+    const g = new THREE.Group();
+    // 箭杆
+    const shaft = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.05, 0.55),
+      new THREE.MeshBasicMaterial({ color: 0x8a6a35 }));
+    g.add(shaft);
+    // 箭头
+    const tip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.09, 0.09, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0xd8d8d8 }));
+    tip.position.z = 0.32;
+    g.add(tip);
+    // 尾羽
+    const feather = new THREE.Mesh(
+      new THREE.BoxGeometry(0.11, 0.02, 0.12),
+      new THREE.MeshBasicMaterial({ color: 0xf0f0f0 }));
+    feather.position.z = -0.26;
+    g.add(feather);
+    this.mesh = g;
+    this.mesh.position.set(x, y, z);
+    mgr.scene.add(this.mesh);
+    Sound.arrowShoot();
+  }
+
+  update(dt, player) {
+    this.age += dt;
+    if (this.stuck) {
+      if (this.age > 20) this.dead = true;   // 插在地上 20 秒后消失
+      return;
+    }
+    if (this.age > 8) { this.dead = true; return; }
+
+    // 弹道重力
+    this.vel.y -= GRAVITY * 0.5 * dt;
+
+    // 分步移动 (防穿块)
+    const speed = Math.sqrt(this.vel.x ** 2 + this.vel.y ** 2 + this.vel.z ** 2);
+    const steps = Math.max(1, Math.ceil(speed * dt / 0.2));
+    const sdt = dt / steps;
+    for (let s = 0; s < steps; s++) {
+      const nx = this.pos.x + this.vel.x * sdt;
+      const ny = this.pos.y + this.vel.y * sdt;
+      const nz = this.pos.z + this.vel.z * sdt;
+
+      // 撞方块
+      const bid = this.mgr.world.getBlock(nx, ny, nz);
+      if (isSolid(bid)) {
+        this.stuck = true;
+        Sound.arrowHit();
+        break;
+      }
+      this.pos.x = nx; this.pos.y = ny; this.pos.z = nz;
+
+      // 命中实体
+      if (!this.damageDone) {
+        if (this.fromPlayer) {
+          for (const e of this.mgr.list) {
+            if (e.type !== "mob" || e.dead) continue;
+            const hw = e.w / 2 + 0.15;
+            if (Math.abs(this.pos.x - e.pos.x) < hw && Math.abs(this.pos.z - e.pos.z) < hw &&
+              this.pos.y > e.pos.y - 0.1 && this.pos.y < e.pos.y + e.h + 0.1) {
+              const dmg = 3 + Math.min(6, speed * 0.25);
+              e.hurt(dmg, { x: this.pos.x - this.vel.x, z: this.pos.z - this.vel.z });
+              this.damageDone = true;
+              this.dead = true;
+              break;
+            }
+          }
+        } else if (player && !player.dead) {
+          const hw = player.w / 2 + 0.15;
+          if (Math.abs(this.pos.x - player.pos.x) < hw && Math.abs(this.pos.z - player.pos.z) < hw &&
+            this.pos.y > player.pos.y - 0.1 && this.pos.y < player.pos.y + player.h + 0.1) {
+            player.hurt(4, { x: this.pos.x - this.vel.x, z: this.pos.z - this.vel.z });
+            this.damageDone = true;
+            this.dead = true;
+            break;
+          }
+        }
+      }
+      if (this.dead) break;
+    }
+
+    // 朝向速度方向
+    if (!this.stuck) {
+      const sp = Math.sqrt(this.vel.x ** 2 + this.vel.y ** 2 + this.vel.z ** 2) || 1;
+      this.mesh.lookAt(this.pos.x + this.vel.x / sp, this.pos.y + this.vel.y / sp, this.pos.z + this.vel.z / sp);
+    }
+    this.mesh.position.set(this.pos.x, this.pos.y, this.pos.z);
+  }
+
   dispose() { this.mgr.scene.remove(this.mesh); }
 }
 
@@ -607,6 +886,7 @@ class EntityManager {
   }
 
   spawnMob(type, x, y, z) {
+    if (!MOB_DEFS[type]) { console.warn("未知生物类型:", type); return null; }
     const m = new Mob(this, type, x, y, z);
     this.list.push(m);
     return m;
@@ -616,6 +896,12 @@ class EntityManager {
     const t = new PrimedTNT(this, x, y, z, fuse);
     this.list.push(t);
     return t;
+  }
+
+  spawnArrow(x, y, z, dir, speed, fromPlayer) {
+    const a = new Arrow(this, x, y, z, dir, speed, fromPlayer);
+    this.list.push(a);
+    return a;
   }
 
   countMobs(hostile) {
@@ -665,7 +951,7 @@ class EntityManager {
     const daylight = G.sky ? G.sky.daylight : 1;
     const night = daylight < 0.45;
 
-    // 敌对 (夜间)
+    // 敌对 (夜间): 僵尸/骷髅/苦力怕
     if (night && this.countMobs(true) < MAX_MOBS_HOSTILE) {
       for (let attempt = 0; attempt < 3; attempt++) {
         const ang = Math.random() * Math.PI * 2;
@@ -676,7 +962,9 @@ class EntityManager {
         if (this.world.getBlock(x, y, z) !== B.AIR || this.world.getBlock(x, y + 1, z) !== B.AIR) continue;
         if (!isSolid(this.world.getBlock(x, y - 1, z))) continue;
         // 光照简化: 表面暴露即可
-        this.spawnMob("zombie", x + 0.5, y, z + 0.5);
+        const roll = Math.random();
+        const type = roll < 0.55 ? "zombie" : roll < 0.8 ? "skeleton" : "creeper";
+        this.spawnMob(type, x + 0.5, y, z + 0.5);
         break;
       }
     }
@@ -692,7 +980,8 @@ class EntityManager {
         const ground = this.world.getBlock(x, y, z);
         if (ground !== B.GRASS && ground !== B.SNOWY_GRASS) continue;
         if (this.world.getBlock(x, y + 1, z) !== B.AIR || this.world.getBlock(x, y + 2, z) !== B.AIR) continue;
-        const type = Math.random() < 0.55 ? "sheep" : "pig";
+        const roll = Math.random();
+        const type = roll < 0.3 ? "sheep" : roll < 0.55 ? "pig" : roll < 0.8 ? "cow" : "chicken";
         // 小群
         const n = 1 + (Math.random() * 3 | 0);
         for (let i = 0; i < n; i++) {

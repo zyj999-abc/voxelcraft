@@ -127,19 +127,50 @@ addShapeless([B.GOLD_BLOCK], I.GOLD_INGOT, 9);
 addShapeless([B.DIAMOND_BLOCK], I.DIAMOND, 9);
 addShapeless([B.COAL_BLOCK], I.COAL, 9);
 
-// 工具 (5 材质 × 4 类型)
+// 工具 (5 材质 × 5 类型)
 const TOOL_MATERIALS = [
-  { block: B.OAK_PLANKS, ids: { PICK: I.WOOD_PICK, AXE: I.WOOD_AXE, SHOVEL: I.WOOD_SHOVEL, SWORD: I.WOOD_SWORD } },
-  { block: B.COBBLESTONE, ids: { PICK: I.STONE_PICK, AXE: I.STONE_AXE, SHOVEL: I.STONE_SHOVEL, SWORD: I.STONE_SWORD } },
-  { block: I.IRON_INGOT, ids: { PICK: I.IRON_PICK, AXE: I.IRON_AXE, SHOVEL: I.IRON_SHOVEL, SWORD: I.IRON_SWORD } },
-  { block: I.GOLD_INGOT, ids: { PICK: I.GOLD_PICK, AXE: I.GOLD_AXE, SHOVEL: I.GOLD_SHOVEL, SWORD: I.GOLD_SWORD } },
-  { block: I.DIAMOND, ids: { PICK: I.DIAMOND_PICK, AXE: I.DIAMOND_AXE, SHOVEL: I.DIAMOND_SHOVEL, SWORD: I.DIAMOND_SWORD } },
+  { block: B.OAK_PLANKS, ids: { PICK: I.WOOD_PICK, AXE: I.WOOD_AXE, SHOVEL: I.WOOD_SHOVEL, SWORD: I.WOOD_SWORD, HOE: I.WOOD_HOE } },
+  { block: B.COBBLESTONE, ids: { PICK: I.STONE_PICK, AXE: I.STONE_AXE, SHOVEL: I.STONE_SHOVEL, SWORD: I.STONE_SWORD, HOE: I.STONE_HOE } },
+  { block: I.IRON_INGOT, ids: { PICK: I.IRON_PICK, AXE: I.IRON_AXE, SHOVEL: I.IRON_SHOVEL, SWORD: I.IRON_SWORD, HOE: I.IRON_HOE } },
+  { block: I.GOLD_INGOT, ids: { PICK: I.GOLD_PICK, AXE: I.GOLD_AXE, SHOVEL: I.GOLD_SHOVEL, SWORD: I.GOLD_SWORD, HOE: I.GOLD_HOE } },
+  { block: I.DIAMOND, ids: { PICK: I.DIAMOND_PICK, AXE: I.DIAMOND_AXE, SHOVEL: I.DIAMOND_SHOVEL, SWORD: I.DIAMOND_SWORD, HOE: I.DIAMOND_HOE } },
 ];
 for (const m of TOOL_MATERIALS) {
   addShaped(["XXX", ".S.", ".S."], { X: m.block, S: I.STICK }, m.ids.PICK, 1);
   addShaped(["XX.", "XS.", ".S."], { X: m.block, S: I.STICK }, m.ids.AXE, 1);
   addShaped(["X", "S", "S"], { X: m.block, S: I.STICK }, m.ids.SHOVEL, 1);
   addShaped(["X", "X", "S"], { X: m.block, S: I.STICK }, m.ids.SWORD, 1);
+  addShaped(["XX.", ".S.", ".S."], { X: m.block, S: I.STICK }, m.ids.HOE, 1);
+}
+
+// 功能方块
+addShaped(["XXX", "X.X", "XXX"], { X: B.OAK_PLANKS }, B.CHEST, 1);
+addShaped(["WWW", "PPP"], { W: B.WOOL, P: B.OAK_PLANKS }, B.BED, 1);
+addShaped(["XX", "XX", "XX"], { X: B.OAK_PLANKS }, B.OAK_DOOR, 3);
+
+// 食物与农产品
+addShaped(["WWW"], { W: I.WHEAT }, I.BREAD, 1);
+addShapeless([I.BONE], I.BONE_MEAL, 3);
+
+// 箭 (碎石代替燧石)
+addShaped(["F", "S", "E"], { F: B.GRAVEL, S: I.STICK, E: I.FEATHER }, I.ARROW, 4);
+
+// 盔甲
+const ARMOR_PATTERNS = {
+  HELMET: ["XXX", "X.X"],
+  CHESTPLATE: ["X.X", "XXX", "XXX"],
+  LEGGINGS: ["XXX", "X.X", "X.X"],
+  BOOTS: ["X.X", "X.X"],
+};
+const ARMOR_RECIPE_MATS = [
+  { mat: I.LEATHER, prefix: "LEATHER_" },
+  { mat: I.IRON_INGOT, prefix: "IRON_" },
+];
+for (const am of ARMOR_RECIPE_MATS) {
+  for (const [slot, pattern] of Object.entries(ARMOR_PATTERNS)) {
+    const id = I[am.prefix + slot];
+    if (id !== undefined) addShaped(pattern, { X: am.mat }, id, 1);
+  }
 }
 
 // 归一化网格 (裁掉空行空列)
@@ -204,6 +235,9 @@ const SMELT_RECIPES = {
   [B.SAND]: { id: B.GLASS, count: 1 },
   [B.COBBLESTONE]: { id: B.STONE, count: 1 },
   [I.PORKCHOP]: { id: I.COOKED_PORKCHOP, count: 1 },
+  [I.BEEF]: { id: I.COOKED_BEEF, count: 1 },
+  [I.CHICKEN_RAW]: { id: I.COOKED_CHICKEN, count: 1 },
+  [I.MUTTON_RAW]: { id: I.COOKED_MUTTON, count: 1 },
   [B.OAK_LOG]: { id: I.CHARCOAL, count: 1 },
   [B.BIRCH_LOG]: { id: I.CHARCOAL, count: 1 },
   [B.SPRUCE_LOG]: { id: I.CHARCOAL, count: 1 },

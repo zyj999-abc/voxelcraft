@@ -65,6 +65,8 @@ function boot() {
   G.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   G.renderer.setSize(window.innerWidth, window.innerHeight);
   G.renderer.autoClear = false;
+  // 统计整个帧(世界+手持两次渲染)而不是最后一次
+  G.renderer.info.autoReset = false;
   container.insertBefore(G.renderer.domElement, container.firstChild);
 
   G.scene = new THREE.Scene();
@@ -223,11 +225,16 @@ function wireUICallbacks() {
   };
   G.ui.onQuitToTitle = () => quitToTitle();
   G.ui.onScreenOpen = () => {
-    expectUnlock = true;
+    releaseMouse();
     Input.keys = Object.create(null);
     Input.mouse.left = Input.mouse.right = Input.mouse.middle = false;
     Input.mouse.leftHandled = Input.mouse.rightHandled = Input.mouse.middleHandled = true;
-    if (document.pointerLockElement) document.exitPointerLock();
+  };
+  G.ui.onDeathShow = () => {
+    // 死亡界面必须释放鼠标, 否则重生按钮无法点击
+    releaseMouse();
+    Input.keys = Object.create(null);
+    Input.mouse.left = Input.mouse.right = Input.mouse.middle = false;
   };
   G.ui.onScreenClose = () => {
     if (G.state === "playing" && !G.paused) lockPointer();
@@ -246,6 +253,8 @@ function disposeWorld() {
       G.scene.remove(G.sky.cloudMesh);
       G.sky.cloudMesh.geometry.dispose();
     }
+    if (G.sky.rain) G.scene.remove(G.sky.rain);
+    if (G.sky.snow) G.scene.remove(G.sky.snow);
   }
   clearHeldMesh();
   if (selBox) selBox.visible = false;
@@ -329,6 +338,13 @@ async function startWorld(meta, isNew) {
     G.player.inventory.selected = sp.selected || 0;
     G.player.flying = !!sp.flying && G.mode === "creative";
     G.player.air = sp.air ?? 10;
+    // 恢复盔甲
+    if (Array.isArray(sp.armor)) {
+      for (let i = 0; i < 4; i++) {
+        const a = sp.armor[i];
+        G.player.armor[i] = (a && ITEMS[a[0]] && ITEMS[a[0]].armor) ? { id: a[0], count: 1, dur: a[1] } : null;
+      }
+    }
   } else {
     spawnXZ = findSpawn();
     G.player.pos = { x: spawnXZ.x + 0.5, y: 72, z: spawnXZ.z + 0.5 };
@@ -395,8 +411,7 @@ function loadChunksAround(px, pz) {
 
 function quitToTitle() {
   if (G.state === "playing" || G.state === "dead") G.save.saveGame();
-  expectUnlock = true;
-  if (document.pointerLockElement) document.exitPointerLock();
+  releaseMouse();
   G.state = "title";
   G.paused = false;
   disposeWorld();
@@ -407,6 +422,7 @@ function quitToTitle() {
 function pauseGame() {
   if (G.state !== "playing" || G.paused) return;
   G.paused = true;
+  releaseMouse();   // 关键: 暂停时释放鼠标, 否则菜单按钮不可点击
   Input.keys = Object.create(null);
   Input.mouse.left = Input.mouse.right = Input.mouse.middle = false;
   G.ui.closeChat();
@@ -428,6 +444,14 @@ function lockPointer() {
     const r = el.requestPointerLock();
     if (r && r.catch) r.catch(() => { });
   } catch (e) { /* 浏览器限制, 等待用户点击 */ }
+}
+
+// 主动释放指针锁定(暂停/死亡/打开界面/聊天时必须调用,
+// 否则锁定期间所有鼠标事件会被重定向到 canvas, 界面按钮无法点击)
+function releaseMouse() {
+  if (!document.pointerLockElement) return;
+  expectUnlock = true;
+  document.exitPointerLock();
 }
 
 /* ==================== 输入 ==================== */
@@ -563,12 +587,14 @@ function onKeyDown(e) {
   if (e.code === "KeyT") {
     e.preventDefault();
     Input.keys = Object.create(null);
+    releaseMouse();   // 聊天时显示光标(与 MC 行为一致)
     G.ui.openChat("");
     return;
   }
   if (e.code === "Slash") {
     e.preventDefault();
     Input.keys = Object.create(null);
+    releaseMouse();
     G.ui.openChat("/");
     return;
   }
@@ -672,6 +698,28 @@ function updateSkyAndLight(dt) {
   const light = G.sky.update(dt, G.gameTime, G.camera.position, G.settings.renderDistance);
   G.world.setDaylight(light);
   G.sky.applyMobLighting(light);
+  G.sky.updateWeather(dt, G.camera.position);
+}
+
+/* ==================== 作物生长 ==================== */
+function tickCrops(dt) {
+  if (!G.world) return;
+  const boost = (G.sky && G.sky.isRaining()) ? 1.5 : 1;
+  for (const [key, be] of G.world.blockEntities) {
+    if (be.type !== "crop") continue;
+    const [x, y, z] = key.split(",").map(Number);
+    const id = G.world.getBlock(x, y, z);
+    if (id < B.WHEAT_0 || id > B.WHEAT_2) { G.world.blockEntities.delete(key); continue; }
+    be.t = (be.t || 0) + dt * boost;
+    if (be.t >= CROP_GROWTH_TIME) {
+      be.t = 0;
+      if (id < B.WHEAT_2) {
+        G.world.setBlock(x, y, z, id + 1);
+        G.world.rebuildAt(x, z);
+        G.entities.particles.burstSprite(x + 0.5, y + 0.4, z + 0.5, 4, "#8ad04a", 0.06, 0.18, 0.8);
+      }
+    }
+  }
 }
 
 /* ==================== 选框 / 破坏进度 ==================== */
@@ -761,11 +809,16 @@ function loop() {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
 
-  // FPS 统计
-  fps.frames++; fps.t += dt;
-  if (fps.t >= 0.5) {
-    fps.value = Math.round(fps.frames / fps.t);
-    fps.frames = 0; fps.t = 0;
+  // 每帧开头重置渲染统计 (autoReset 已关闭, 手动累计两次渲染)
+  if (G.renderer) G.renderer.info.reset();
+
+  // FPS 统计 (按真实时间间隔计算, 不受 dt 0.05 上限影响)
+  if (fps.t === 0) fps.t = now;   // 首帧初始化时间戳
+  fps.frames++;
+  const elapsed = now - fps.t;
+  if (elapsed >= 500) {
+    fps.value = Math.round(fps.frames * 1000 / elapsed);
+    fps.frames = 0; fps.t = now;
   }
 
   if (G.state === "title" || !G.world) {
@@ -786,6 +839,7 @@ function loop() {
     G.world.update(G.player.pos.x, G.player.pos.z);
     G.entities.update(dt, G.player);
     tickFurnace(G.world, dt);
+    tickCrops(dt);
     G.ui.updateHud();
     G.ui.tickFurnaceLive();
 
@@ -799,7 +853,7 @@ function loop() {
 
   if (G.state === "playing" || G.state === "dead") {
     updateCamera(active ? dt : 0);
-    updateSkyAndLight(dt);
+    updateSkyAndLight(active ? dt : 0);
     updateSelectionAndBreak();
     updateHeldItem(dt);
     updateDebugInfo(dt);

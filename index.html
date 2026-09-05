@@ -15,6 +15,7 @@
   <div id="hud" class="hidden">
     <div id="crosshair"></div>
     <div id="hud-bottom">
+      <div id="armor-row"><div id="armor" class="status-bar"></div></div>
       <div id="status-row">
         <div id="hearts" class="status-bar"></div>
         <div id="hunger" class="status-bar"></div>
@@ -34,9 +35,10 @@
     <input id="chat-input" type="text" maxlength="120" autocomplete="off" spellcheck="false">
   </div>
 
-  <!-- 水下滤镜 / 受伤红闪 -->
+  <!-- 水下滤镜 / 受伤红闪 / 睡眠渐变 -->
   <div id="underwater-overlay" class="hidden"></div>
   <div id="damage-overlay"></div>
+  <div id="sleep-overlay" class="hidden"><div class="sleep-text">睡觉中…</div></div>
 
   <!-- ===================== 标题画面 ===================== -->
   <div id="title-screen" class="screen">
@@ -155,6 +157,11 @@
   <!-- 熔炉 -->
   <div id="furnace-screen" class="screen hidden translucent">
     <div class="inv-panel" id="furnace-panel"></div>
+  </div>
+
+  <!-- 箱子 -->
+  <div id="chest-screen" class="screen hidden translucent">
+    <div class="inv-panel" id="chest-panel"></div>
   </div>
 
   <!-- 死亡 -->

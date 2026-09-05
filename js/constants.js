@@ -27,6 +27,9 @@ const MAX_MOBS_PASSIVE = 14;      // 友好生物上限
 const SAVE_KEY_PREFIX = "voxelcraft_world_";
 const SETTINGS_KEY = "voxelcraft_settings";
 const SAVE_AUTOSAVE_INTERVAL = 30;
+const CROP_GROWTH_TIME = 40;      // 小麦每阶段生长耗时(秒), 雨天加速
+const ARMOR_POINTS_MAX = 20;      // 盔甲点上限(80% 减伤)
+const WEATHER_RAIN_CHANCE = 0.3;  // 晴天转雨概率权重
 
 // 全局游戏对象
 const G = {

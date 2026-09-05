@@ -133,6 +133,63 @@ const Sound = {
     this.tone({ freq: 340, dur: 0.35, gain: 0.14, type: "sawtooth", slide: 30 });
   },
 
+  cowMoo() {
+    if (!this.ctx) return;
+    const f = 140 + Math.random() * 30;
+    this.tone({ freq: f, dur: 0.7, gain: 0.16, type: "sawtooth", slide: -35 });
+    this.tone({ freq: f * 1.5, dur: 0.5, gain: 0.05, type: "sine", slide: -20, delay: 0.08 });
+  },
+
+  chickenCluck() {
+    if (!this.ctx) return;
+    const n = 2 + ((Math.random() * 2) | 0);
+    for (let i = 0; i < n; i++) {
+      this.tone({ freq: 700 + Math.random() * 300, dur: 0.08, gain: 0.1, type: "square", slide: -180, delay: i * 0.12 });
+    }
+  },
+
+  skeletonRattle() {
+    if (!this.ctx) return;
+    const n = 3 + ((Math.random() * 3) | 0);
+    for (let i = 0; i < n; i++) {
+      this.noiseBurst({ dur: 0.05, freq: 2400 + Math.random() * 800, gain: 0.08, type: "bandpass", q: 4, rate: 1.5 });
+    }
+  },
+
+  creeperHiss() {
+    this.noiseBurst({ dur: 1.4, freq: 4200, gain: 0.22, type: "highpass", q: 0.7 });
+  },
+
+  arrowShoot() {
+    this.noiseBurst({ dur: 0.12, freq: 2600, gain: 0.14, type: "bandpass", q: 3, rate: 1.6 });
+  },
+
+  arrowHit() {
+    this.noiseBurst({ dur: 0.08, freq: 900, gain: 0.2, type: "lowpass" });
+    this.tone({ freq: 200, dur: 0.05, gain: 0.1, type: "triangle", slide: -60 });
+  },
+
+  doorOpen() { this.tone({ freq: 240, dur: 0.18, gain: 0.2, type: "sawtooth", slide: 90 }); },
+  doorClose() { this.tone({ freq: 300, dur: 0.14, gain: 0.2, type: "sawtooth", slide: -110 }); },
+  chestOpen() { this.tone({ freq: 180, dur: 0.22, gain: 0.16, type: "triangle", slide: 60 }); },
+  chestClose() { this.tone({ freq: 260, dur: 0.16, gain: 0.16, type: "triangle", slide: -80 }); },
+  levelUp() {
+    this.tone({ freq: 523, dur: 0.12, gain: 0.18, type: "sine" });
+    this.tone({ freq: 659, dur: 0.12, gain: 0.18, type: "sine", delay: 0.1 });
+    this.tone({ freq: 784, dur: 0.2, gain: 0.18, type: "sine", delay: 0.2 });
+  },
+
+  rainAmbient() {
+    this.noiseBurst({ dur: 1.8, freq: 1500, gain: 0.06, type: "bandpass", q: 0.4 });
+  },
+
+  thunder() {
+    if (!this.ctx) return;
+    this.noiseBurst({ dur: 2.2, freq: 180, gain: 0.8, type: "lowpass" });
+    this.tone({ freq: 50, dur: 1.4, gain: 0.45, type: "sine", slide: -20 });
+    this.noiseBurst({ dur: 1.0, freq: 900, gain: 0.25, type: "bandpass", q: 0.6, delay: 0 });
+  },
+
   explosion() {
     if (!this.ctx) return;
     this.noiseBurst({ dur: 1.1, freq: 300, gain: 0.9, type: "lowpass" });

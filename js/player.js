@@ -30,6 +30,8 @@ class Player {
     this.spawnPoint = null;
     this.inventory = new Inventory();
     this.swimSoundCd = 0;
+    // 盔甲: 0头盔 1胸甲 2护腿 3靴子
+    this.armor = [null, null, null, null];
 
     // 挖掘/放置/食用
     this.breakTarget = null;
@@ -62,11 +64,38 @@ class Player {
 
   get reach() { return this.mode === "creative" ? REACH_CREATIVE : REACH_SURVIVAL; }
 
+  // ==================== 盔甲 ====================
+  armorPoints() {
+    let pts = 0;
+    for (const s of this.armor) {
+      if (s && ITEMS[s.id] && ITEMS[s.id].armor) pts += ITEMS[s.id].armor.defense;
+    }
+    return Math.min(ARMOR_POINTS_MAX, pts);
+  }
+
+  damageArmor(amount) {
+    let broke = false;
+    for (let i = 0; i < 4; i++) {
+      const s = this.armor[i];
+      if (!s || !ITEMS[s.id].armor) continue;
+      s.dur = (s.dur === undefined ? ITEMS[s.id].armor.durability : s.dur) - amount;
+      if (s.dur <= 0) { this.armor[i] = null; broke = true; }
+    }
+    if (broke) Sound.tone && Sound.tone({ freq: 320, dur: 0.25, gain: 0.22, type: "square", slide: -180 });
+    if (G.ui) G.ui.updateHud();
+  }
+
   // ==================== 伤害 / 生存 ====================
   hurt(dmg, fromPos) {
     if (this.dead || this.mode === "creative") return;
     if (this.hurtCooldown > 0) return;
     this.hurtCooldown = 0.5;
+    // 盔甲减伤 (每点 4%, 上限 80%)
+    const pts = this.armorPoints();
+    if (pts > 0) {
+      dmg = dmg * (1 - Math.min(0.8, pts * 0.04));
+      this.damageArmor(1);
+    }
     this.hp -= dmg;
     Sound.hurt();
     if (G.ui) { G.ui.damageFlash(); G.ui.shake(0.25); }
@@ -88,6 +117,14 @@ class Player {
       if (s) {
         this.entities.spawnDrop(this.pos.x, this.pos.y + 0.8, this.pos.z, s.id, s.count);
         this.inventory.slots[i] = null;
+      }
+    }
+    // 掉落盔甲
+    for (let i = 0; i < 4; i++) {
+      const s = this.armor[i];
+      if (s) {
+        this.entities.spawnDrop(this.pos.x, this.pos.y + 0.8, this.pos.z, s.id, 1);
+        this.armor[i] = null;
       }
     }
     if (G.ui) G.ui.showDeath(cause || "你死了");
@@ -412,8 +449,50 @@ class Player {
   tryUseOrPlace(eye, dir) {
     const hit = raycastVoxel(this.world, eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, this.reach);
     if (!hit) return;
+    const held = this.inventory.getHeld();
+    const heldItem = held ? ITEMS[held.id] : null;
 
-    // 方块交互
+    // ---- 食物/工具对作物与土地的使用 (优先于放置) ----
+    // 骨粉: 催熟小麦
+    if (heldItem && heldItem.boneMeal) {
+      if (hit.id >= B.WHEAT_0 && hit.id < B.WHEAT_2) {
+        this.world.setBlock(hit.x, hit.y, hit.z, hit.id + 1);
+        this.world.rebuildAt(hit.x, hit.z);
+        this.entities.particles.burstSprite(
+          hit.x + 0.5, hit.y + 0.5, hit.z + 0.5, 14, "#8ad04a", 0.07, 0.28, 1.6);
+        Sound.blockSound(hit.id + 1, "place");
+        this.swingT = 0;
+        if (this.mode === "survival") { this.inventory.consumeHeld(); if (G.ui) G.ui.refreshHotbar(); }
+        return;
+      }
+    }
+    // 锄头: 耕地
+    if (heldItem && heldItem.tool && heldItem.tool.type === "hoe") {
+      const t = hit.id;
+      if ((t === B.GRASS || t === B.DIRT || t === B.SNOWY_GRASS) &&
+        this.world.getBlock(hit.x, hit.y + 1, hit.z) === B.AIR) {
+        this.world.setBlock(hit.x, hit.y, hit.z, B.FARMLAND);
+        this.world.rebuildAt(hit.x, hit.z);
+        this.entities.particles.burstBlock(hit.x + 0.5, hit.y + 1, hit.z + 0.5, B.DIRT, 8);
+        Sound.blockSound(B.FARMLAND, "dig");
+        this.swingT = 0;
+        if (this.mode === "survival") this.inventory.damageHeld();
+        return;
+      }
+    }
+    // 种子: 播种在耕地上
+    if (heldItem && heldItem.plantSeed !== undefined && hit.id === B.FARMLAND &&
+      this.world.getBlock(hit.x, hit.y + 1, hit.z) === B.AIR) {
+      this.world.setBlock(hit.x, hit.y + 1, hit.z, heldItem.plantSeed);
+      this.world.rebuildAt(hit.x, hit.z);
+      this.world.blockEntities.set(`${hit.x},${hit.y + 1},${hit.z}`, { type: "crop", t: 0 });
+      Sound.blockSound(heldItem.plantSeed, "place");
+      this.swingT = 0;
+      if (this.mode === "survival") { this.inventory.consumeHeld(); if (G.ui) G.ui.refreshHotbar(); }
+      return;
+    }
+
+    // ---- 方块交互 ----
     const block = BLOCKS[hit.id];
     if (block.interact) {
       this.swingT = 0;
@@ -421,6 +500,12 @@ class Player {
         G.ui.openScreen("table");
       } else if (block.interact === "furnace") {
         G.ui.openFurnace(hit.x, hit.y, hit.z);
+      } else if (block.interact === "chest") {
+        G.ui.openChest(hit.x, hit.y, hit.z);
+      } else if (block.interact === "door") {
+        this.toggleDoor(hit.x, hit.y, hit.z);
+      } else if (block.interact === "bed") {
+        this.trySleep(hit.x, hit.y, hit.z);
       } else if (block.interact === "tnt") {
         this.world.setBlock(hit.x, hit.y, hit.z, B.AIR);
         this.world.rebuildAt(hit.x, hit.z);
@@ -430,9 +515,8 @@ class Player {
       return;
     }
 
-    // 放置
-    const held = this.inventory.getHeld();
-    if (!held || !ITEMS[held.id] || !ITEMS[held.id].isBlock) return;
+    // ---- 放置 ----
+    if (!held || !heldItem || !heldItem.isBlock) return;
     const px = hit.x + hit.face[0], py = hit.y + hit.face[1], pz = hit.z + hit.face[2];
     if (py < 0 || py >= WORLD_HEIGHT) return;
 
@@ -440,6 +524,12 @@ class Player {
     if (existing !== B.AIR && existing !== B.WATER && !BLOCKS[existing].plant) return;
 
     const placeBlock = BLOCKS[held.id];
+    // 门: 需要两格空间
+    if (held.id === B.OAK_DOOR) {
+      if (py + 1 >= WORLD_HEIGHT) return;
+      const upper = this.world.getBlock(px, py + 1, pz);
+      if (upper !== B.AIR && !BLOCKS[upper].plant) return;
+    }
     // 不能放进自己身体
     if (placeBlock.solid) {
       const hw = this.w / 2;
@@ -477,13 +567,58 @@ class Player {
     this.swingT = 0;
     this.addExhaustion(0.005);
 
+    // 放置朝向 (方块相对玩家的方位): 0北(-Z) 1东(+X) 2南(+Z) 3西(-X)
+    const fdx = this.pos.x - (px + 0.5), fdz = this.pos.z - (pz + 0.5);
+    const facing = Math.abs(fdx) > Math.abs(fdz) ? (fdx > 0 ? 1 : 3) : (fdz > 0 ? 2 : 0);
+
     if (held.id === B.FURNACE) {
       this.world.blockEntities.set(`${px},${py},${pz}`, newFurnaceState());
+    } else if (held.id === B.CHEST) {
+      this.world.blockEntities.set(`${px},${py},${pz}`, { type: "chest", items: new Array(27).fill(null), facing });
+    } else if (held.id === B.BED) {
+      this.world.blockEntities.set(`${px},${py},${pz}`, { type: "bed", facing });
+    } else if (held.id === B.OAK_DOOR) {
+      this.world.setBlock(px, py + 1, pz, B.OAK_DOOR_UPPER);
+      this.world.blockEntities.set(`${px},${py},${pz}`, { type: "door", facing, half: 0 });
+      this.world.blockEntities.set(`${px},${py + 1},${pz}`, { type: "door", facing, half: 1 });
     }
+
     if (this.mode === "survival") {
       this.inventory.consumeHeld();
       if (G.ui) G.ui.refreshHotbar();
     }
+  }
+
+  // ==================== 门 / 床 ====================
+  toggleDoor(x, y, z) {
+    const id = this.world.getBlock(x, y, z);
+    if (!isDoorBlock(id)) return;
+    const lowerY = BLOCKS[id].doorHalf === 0 ? y : y - 1;
+    const lowerId = this.world.getBlock(x, lowerY, z);
+    if (!isDoorBlock(lowerId) || BLOCKS[lowerId].doorHalf !== 0) return;
+    const open = !BLOCKS[lowerId].doorOpen;
+    this.world.setBlock(x, lowerY, z, open ? B.OAK_DOOR_OPEN : B.OAK_DOOR);
+    this.world.setBlock(x, lowerY + 1, z, open ? B.OAK_DOOR_UPPER_OPEN : B.OAK_DOOR_UPPER);
+    this.world.rebuildAt(x, z);
+    if (open) Sound.doorOpen(); else Sound.doorClose();
+  }
+
+  trySleep(x, y, z) {
+    const dayT = (G.gameTime / DAY_LENGTH) % 1;
+    const isNight = dayT > 0.52 || dayT < 0.005;
+    const storm = G.sky && G.sky.isThundering();
+    if (!isNight && !storm) {
+      G.ui.addChat("你只能在夜晚或雷雨天睡觉");
+      return;
+    }
+    // 床边重生点
+    this.spawnPoint = { x: x + 0.5, y: y + 0.75, z: z + 0.5 };
+    G.ui.showSleepFade(() => {
+      // 跳到次日清晨
+      G.gameTime = (Math.floor(G.gameTime / DAY_LENGTH) + 1) * DAY_LENGTH;
+      if (G.sky && G.sky.clearWeather) G.sky.clearWeather();
+      G.ui.addChat("你睡了一觉, 早上好!");
+    });
   }
 
   breakBlock(x, y, z, withDrops) {
@@ -491,9 +626,25 @@ class Player {
     if (id === B.AIR || BLOCKS[id].hardness < 0) return;
     const held = this.inventory.getHeld();
 
+    // 箱子: 先取出内容物
+    let chestItems = null;
+    if (id === B.CHEST) {
+      const be = this.world.blockEntities.get(`${x},${y},${z}`);
+      if (be && be.items) chestItems = be.items.slice();
+    }
+
     this.world.setBlock(x, y, z, B.AIR);
     this.world.rebuildAt(x, z);
     this.world.rebuildNeighbors(x, z);
+
+    // 门: 联动移除另一半
+    if (isDoorBlock(id)) {
+      const otherY = BLOCKS[id].doorHalf === 0 ? y + 1 : y - 1;
+      if (isDoorBlock(this.world.getBlock(x, otherY, z))) {
+        this.world.setBlock(x, otherY, z, B.AIR);
+        this.world.rebuildAt(x, z);
+      }
+    }
 
     // 上方依附方块塌落
     const above = this.world.getBlock(x, y + 1, z);
@@ -505,6 +656,12 @@ class Player {
           this.entities.spawnDrop(x + 0.5, y + 1.3, z + 0.5, d.id, d.count);
       }
     }
+    // 上方是门上半: 一并移除
+    if (isDoorBlock(this.world.getBlock(x, y + 1, z))) {
+      this.world.setBlock(x, y + 1, z, B.AIR);
+      this.world.rebuildAt(x, z);
+      if (withDrops) this.entities.spawnDrop(x + 0.5, y + 1.3, z + 0.5, B.OAK_DOOR, 1);
+    }
 
     Sound.breakBlock(id);
     this.entities.particles.burstBlock(x + 0.5, y, z + 0.5, id, 14);
@@ -514,6 +671,12 @@ class Player {
       const drops = getDrops(id, held ? held.id : 0);
       for (const d of drops) {
         this.entities.spawnDrop(x + 0.5, y + 0.3, z + 0.5, d.id, d.count);
+      }
+      // 箱子内容物
+      if (chestItems) {
+        for (const s of chestItems) {
+          if (s) this.entities.spawnDrop(x + 0.5, y + 0.5, z + 0.5, s.id, s.count);
+        }
       }
       // 工具磨损
       if (held && ITEMS[held.id].tool) {

@@ -94,6 +94,7 @@ class SaveManager {
         air: G.player.air === undefined ? 10 : G.player.air,
         inventory: G.player.inventory.serialize(),
         selected: G.player.inventory.selected,
+        armor: G.player.armor.map(s => s ? [s.id, s.dur] : null),
       },
       edits,
       blockEntities,

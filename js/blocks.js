@@ -15,7 +15,21 @@ const B = {
   OBSIDIAN: 32, ICE: 33, PUMPKIN: 34, BIRCH_LOG: 35, BIRCH_LEAVES: 36,
   SPRUCE_LOG: 37, SPRUCE_LEAVES: 38, WOOL: 39, MOSSY_COBBLESTONE: 40,
   COAL_BLOCK: 41, IRON_BLOCK: 42, GOLD_BLOCK: 43, DIAMOND_BLOCK: 44,
+  CHEST: 45, BED: 46, OAK_DOOR: 47, FARMLAND: 48,
+  WHEAT_0: 49, WHEAT_1: 50, WHEAT_2: 51,
+  OAK_DOOR_UPPER: 52, OAK_DOOR_OPEN: 53, OAK_DOOR_UPPER_OPEN: 54,
 };
+
+// 判断是否为门方块(任意一半/开关状态)
+function isDoorBlock(id) {
+  return id === B.OAK_DOOR || id === B.OAK_DOOR_UPPER ||
+    id === B.OAK_DOOR_OPEN || id === B.OAK_DOOR_UPPER_OPEN;
+}
+// 判断是否为使用 blockEntity 的方块
+function usesBlockEntity(id) {
+  return id === B.FURNACE || id === B.CHEST || id === B.BED ||
+    isDoorBlock(id) || (id >= B.WHEAT_0 && id <= B.WHEAT_2);
+}
 
 // ---- 物品 ID (>=100) ----
 const I = {
@@ -25,6 +39,13 @@ const I = {
   WOOD_AXE: 115, STONE_AXE: 116, IRON_AXE: 117, GOLD_AXE: 118, DIAMOND_AXE: 119,
   WOOD_SHOVEL: 120, STONE_SHOVEL: 121, IRON_SHOVEL: 122, GOLD_SHOVEL: 123, DIAMOND_SHOVEL: 124,
   WOOD_SWORD: 125, STONE_SWORD: 126, IRON_SWORD: 127, GOLD_SWORD: 128, DIAMOND_SWORD: 129,
+  WOOD_HOE: 130, STONE_HOE: 131, IRON_HOE: 132, DIAMOND_HOE: 133, GOLD_HOE: 158,
+  SEEDS: 134, WHEAT: 135, BREAD: 136,
+  BEEF: 137, COOKED_BEEF: 138, CHICKEN_RAW: 139, COOKED_CHICKEN: 140,
+  MUTTON_RAW: 141, COOKED_MUTTON: 142,
+  LEATHER: 143, FEATHER: 144, BONE: 145, ARROW: 146, BONE_MEAL: 147,
+  LEATHER_HELMET: 150, LEATHER_CHESTPLATE: 151, LEATHER_LEGGINGS: 152, LEATHER_BOOTS: 153,
+  IRON_HELMET: 154, IRON_CHESTPLATE: 155, IRON_LEGGINGS: 156, IRON_BOOTS: 157,
 };
 
 // ---- 注册表 ----
@@ -105,7 +126,7 @@ defBlock(B.SNOWY_GRASS, "积雪草方块", {
 });
 defBlock(B.SNOW_BLOCK, "雪块", { tex: { all: "snow" }, hardness: 0.2, tool: "shovel" });
 defBlock(B.CACTUS, "仙人掌", { tex: { top: "cactus_top", bottom: "cactus_top", side: "cactus_side" }, hardness: 0.4, opaque: false });
-defBlock(B.TALL_GRASS, "草", { tex: { all: "tall_grass" }, solid: false, opaque: false, plant: true, hardness: 0, drops: [] });
+defBlock(B.TALL_GRASS, "草", { tex: { all: "tall_grass" }, solid: false, opaque: false, plant: true, hardness: 0, drops: [{ id: I.SEEDS, min: 1, max: 1, chance: 0.35 }] });
 defBlock(B.POPPY, "虞美人", { tex: { all: "poppy" }, solid: false, opaque: false, plant: true, hardness: 0 });
 defBlock(B.DANDELION, "蒲公英", { tex: { all: "dandelion" }, solid: false, opaque: false, plant: true, hardness: 0 });
 defBlock(B.DEAD_BUSH, "枯灌木", { tex: { all: "dead_bush" }, solid: false, opaque: false, plant: true, hardness: 0, drops: [{ id: I.STICK, min: 1, max: 2, chance: 0.5 }] });
@@ -138,6 +159,55 @@ defBlock(B.IRON_BLOCK, "铁块", { tex: { all: "iron_block" }, hardness: 5, tool
 defBlock(B.GOLD_BLOCK, "金块", { tex: { all: "gold_block" }, hardness: 3, tool: "pickaxe", needsTool: true, minTier: 3 });
 defBlock(B.DIAMOND_BLOCK, "钻石块", { tex: { all: "diamond_block" }, hardness: 5, tool: "pickaxe", needsTool: true, minTier: 3 });
 
+// 箱子: 内缩盒体渲染, 27 格存储
+defBlock(B.CHEST, "箱子", {
+  tex: { top: "chest_top", bottom: "chest_top", side: "chest_side", front: "chest_front" },
+  renderType: "chest", hardness: 2.5, tool: "axe", interact: "chest", opaque: false,
+});
+// 床: 半高盒体, 右键睡觉跳夜/设重生点
+defBlock(B.BED, "床", {
+  tex: { top: "bed_top", bottom: "planks", side: "bed_side", front: "bed_side" },
+  renderType: "bed", hardness: 0.2, interact: "bed", opaque: false,
+});
+// 门: 薄板渲染, 关闭时有碰撞; 上半无碰撞体由下半决定
+defBlock(B.OAK_DOOR, "橡木门", {
+  tex: { all: "door_bottom" }, renderType: "door", doorHalf: 0, doorOpen: false,
+  hardness: 3, tool: "axe", interact: "door", opaque: false,
+});
+defBlock(B.OAK_DOOR_UPPER, "橡木门", {
+  tex: { all: "door_top" }, renderType: "door", doorHalf: 1, doorOpen: false,
+  hardness: 3, tool: "axe", interact: "door", solid: false, opaque: false,
+  drops: [],
+});
+defBlock(B.OAK_DOOR_OPEN, "橡木门", {
+  tex: { all: "door_bottom" }, renderType: "door", doorHalf: 0, doorOpen: true,
+  hardness: 3, tool: "axe", interact: "door", solid: false, opaque: false,
+  drops: [{ id: B.OAK_DOOR, min: 1, max: 1, chance: 1 }],
+});
+defBlock(B.OAK_DOOR_UPPER_OPEN, "橡木门", {
+  tex: { all: "door_top" }, renderType: "door", doorHalf: 1, doorOpen: true,
+  hardness: 3, tool: "axe", interact: "door", solid: false, opaque: false,
+  drops: [],
+});
+// 耕地
+defBlock(B.FARMLAND, "耕地", {
+  tex: { top: "farmland", bottom: "dirt", side: "farmland_side" },
+  hardness: 0.6, tool: "shovel", drops: [{ id: B.DIRT, min: 1, max: 1, chance: 1 }],
+});
+// 小麦 (3 生长阶段)
+defBlock(B.WHEAT_0, "小麦作物", {
+  tex: { all: "wheat_0" }, solid: false, opaque: false, plant: true, hardness: 0,
+  drops: [{ id: I.SEEDS, min: 1, max: 1, chance: 1 }],
+});
+defBlock(B.WHEAT_1, "小麦作物", {
+  tex: { all: "wheat_1" }, solid: false, opaque: false, plant: true, hardness: 0,
+  drops: [{ id: I.SEEDS, min: 1, max: 2, chance: 1 }],
+});
+defBlock(B.WHEAT_2, "小麦", {
+  tex: { all: "wheat_2" }, solid: false, opaque: false, plant: true, hardness: 0,
+  drops: [{ id: I.WHEAT, min: 1, max: 1, chance: 1 }, { id: I.SEEDS, min: 1, max: 2, chance: 1 }],
+});
+
 // ==================== 物品定义 ====================
 defItem(I.STICK, "木棍", {});
 defItem(I.COAL, "煤炭", {});
@@ -148,6 +218,20 @@ defItem(I.DIAMOND, "钻石", {});
 defItem(I.APPLE, "苹果", { food: 4 });
 defItem(I.PORKCHOP, "生猪排", { food: 3 });
 defItem(I.COOKED_PORKCHOP, "熟猪排", { food: 8 });
+defItem(I.BEEF, "生牛肉", { food: 3 });
+defItem(I.COOKED_BEEF, "牛排", { food: 8 });
+defItem(I.CHICKEN_RAW, "生鸡肉", { food: 2 });
+defItem(I.COOKED_CHICKEN, "熟鸡肉", { food: 6 });
+defItem(I.MUTTON_RAW, "生羊肉", { food: 2 });
+defItem(I.COOKED_MUTTON, "熟羊肉", { food: 6 });
+defItem(I.BREAD, "面包", { food: 5 });
+defItem(I.SEEDS, "小麦种子", { plantSeed: B.WHEAT_0 });
+defItem(I.WHEAT, "小麦", {});
+defItem(I.LEATHER, "皮革", {});
+defItem(I.FEATHER, "羽毛", {});
+defItem(I.BONE, "骨头", {});
+defItem(I.BONE_MEAL, "骨粉", { boneMeal: true });
+defItem(I.ARROW, "箭", {});
 
 // 工具: {type, tier, speed, durability, damage}
 const TOOL_MATS = [
@@ -162,6 +246,7 @@ const TOOL_TYPES = [
   { key: "AXE", zh: "斧", type: "axe", baseDmg: 3 },
   { key: "SHOVEL", zh: "锹", type: "shovel", baseDmg: 1.5 },
   { key: "SWORD", zh: "剑", type: "sword", baseDmg: 4 },
+  { key: "HOE", zh: "锄", type: "hoe", baseDmg: 1 },
 ];
 for (const mat of TOOL_MATS) {
   for (const tt of TOOL_TYPES) {
@@ -175,6 +260,27 @@ for (const mat of TOOL_MATS) {
     });
   }
 }
+
+// ==================== 盔甲 ====================
+// armor: {slot 0头/1身/2腿/3脚, defense, durability}
+const ARMOR_MATS = [
+  { key: "LEATHER", zh: "皮革", ids: [I.LEATHER_HELMET, I.LEATHER_CHESTPLATE, I.LEATHER_LEGGINGS, I.LEATHER_BOOTS], def: [1, 3, 2, 1], dur: [55, 80, 75, 65] },
+  { key: "IRON", zh: "铁", ids: [I.IRON_HELMET, I.IRON_CHESTPLATE, I.IRON_LEGGINGS, I.IRON_BOOTS], def: [2, 6, 5, 2], dur: [165, 240, 225, 195] },
+];
+const ARMOR_SLOT_NAMES = ["头盔", "胸甲", "护腿", "靴子"];
+for (const mat of ARMOR_MATS) {
+  mat.ids.forEach((id, i) => {
+    defItem(id, mat.zh + ARMOR_SLOT_NAMES[i], {
+      stack: 1,
+      armor: { slot: i, defense: mat.def[i], durability: mat.dur[i] },
+    });
+  });
+}
+
+// 门上半等变体不作为物品出现
+delete ITEMS[B.OAK_DOOR_UPPER];
+delete ITEMS[B.OAK_DOOR_OPEN];
+delete ITEMS[B.OAK_DOOR_UPPER_OPEN];
 
 // ==================== 工具函数 ====================
 function getBlock(id) { return BLOCKS[id] || BLOCKS[0]; }
@@ -230,18 +336,23 @@ function getDrops(blockId, heldItemId) {
 
 // 创造模式物品栏顺序
 const CREATIVE_ITEMS = [
-  B.GRASS, B.DIRT, B.STONE, B.COBBLESTONE, B.MOSSY_COBBLESTONE, B.STONE_BRICKS, B.BRICKS,
+  B.GRASS, B.DIRT, B.FARMLAND, B.STONE, B.COBBLESTONE, B.MOSSY_COBBLESTONE, B.STONE_BRICKS, B.BRICKS,
   B.SAND, B.SANDSTONE, B.GRAVEL, B.SNOWY_GRASS, B.SNOW_BLOCK, B.ICE,
   B.OAK_LOG, B.BIRCH_LOG, B.SPRUCE_LOG, B.OAK_PLANKS, B.OAK_LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES,
   B.CACTUS, B.PUMPKIN, B.WOOL, B.BOOKSHELF, B.GLASS, B.OBSIDIAN, B.BEDROCK,
   B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.DIAMOND_ORE,
   B.COAL_BLOCK, B.IRON_BLOCK, B.GOLD_BLOCK, B.DIAMOND_BLOCK,
-  B.CRAFTING_TABLE, B.FURNACE, B.TNT, B.TORCH,
-  B.TALL_GRASS, B.POPPY, B.DANDELION, B.DEAD_BUSH,
+  B.CRAFTING_TABLE, B.FURNACE, B.CHEST, B.BED, B.OAK_DOOR, B.TNT, B.TORCH,
+  B.TALL_GRASS, B.POPPY, B.DANDELION, B.DEAD_BUSH, B.WHEAT_0,
   I.STICK, I.COAL, I.CHARCOAL, I.IRON_INGOT, I.GOLD_INGOT, I.DIAMOND,
-  I.APPLE, I.PORKCHOP, I.COOKED_PORKCHOP,
+  I.SEEDS, I.WHEAT, I.BREAD, I.LEATHER, I.FEATHER, I.BONE, I.BONE_MEAL, I.ARROW,
+  I.APPLE, I.PORKCHOP, I.COOKED_PORKCHOP, I.BEEF, I.COOKED_BEEF,
+  I.CHICKEN_RAW, I.COOKED_CHICKEN, I.MUTTON_RAW, I.COOKED_MUTTON,
   I.WOOD_PICK, I.STONE_PICK, I.IRON_PICK, I.GOLD_PICK, I.DIAMOND_PICK,
   I.WOOD_AXE, I.STONE_AXE, I.IRON_AXE, I.GOLD_AXE, I.DIAMOND_AXE,
   I.WOOD_SHOVEL, I.STONE_SHOVEL, I.IRON_SHOVEL, I.GOLD_SHOVEL, I.DIAMOND_SHOVEL,
   I.WOOD_SWORD, I.STONE_SWORD, I.IRON_SWORD, I.GOLD_SWORD, I.DIAMOND_SWORD,
+  I.WOOD_HOE, I.STONE_HOE, I.IRON_HOE, I.GOLD_HOE, I.DIAMOND_HOE,
+  I.LEATHER_HELMET, I.LEATHER_CHESTPLATE, I.LEATHER_LEGGINGS, I.LEATHER_BOOTS,
+  I.IRON_HELMET, I.IRON_CHESTPLATE, I.IRON_LEGGINGS, I.IRON_BOOTS,
 ];

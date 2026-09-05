@@ -39,8 +39,9 @@ class UI {
     this.cursorStack = null;        // 鼠标手持
     this.craft2 = new Array(4).fill(null);   // 2x2 合成格
     this.craft3 = new Array(9).fill(null);   // 3x3 合成格
-    this.openName = null;           // inventory | table | furnace
+    this.openName = null;           // inventory | table | furnace | chest
     this.furnaceKey = null;
+    this.chestKey = null;
     this.deathCause = "none";       // player.js 引用(需 truthy)
     this.creativeFilter = "";
 
@@ -48,7 +49,7 @@ class UI {
     this._shakeT = 0; this._shakeDur = 0; this._shakeAmp = 0;
 
     // HUD 缓存
-    this._hud = { hp: -1, hunger: -1, air: -1 };
+    this._hud = { hp: -1, hunger: -1, air: -1, armor: -1 };
     this._hotbarSel = -1;
 
     // 聊天
@@ -69,6 +70,7 @@ class UI {
     this.onQuitToTitle = null;
     this.onScreenOpen = null;
     this.onScreenClose = null;
+    this.onDeathShow = null;
   }
 
   // ==================== 初始化 ====================
@@ -85,8 +87,14 @@ class UI {
       empty: makeHungerIcon("empty").toDataURL(),
     };
     this.bubbleIcon = makeBubbleIcon().toDataURL();
+    this.armorIcons = {
+      full: makeArmorIcon("full").toDataURL(),
+      half: makeArmorIcon("half").toDataURL(),
+      empty: makeArmorIcon("empty").toDataURL(),
+    };
     this.$("hunger").style.flexDirection = "row-reverse";
     this.$("air").style.flexDirection = "row-reverse";
+    this.$("armor-row").style.display = "none";
 
     this.buildHotbarDom();
     this.bindMenus();
@@ -188,6 +196,43 @@ class UI {
         this.$("air").innerHTML = "";
       }
     }
+    // 盔甲条
+    const armorPts = p.mode === "survival" ? p.armorPoints() : 0;
+    if (this._hud.armor !== armorPts) {
+      this._hud.armor = armorPts;
+      const row = this.$("armor-row");
+      const el = this.$("armor");
+      el.innerHTML = "";
+      if (armorPts > 0 && p.mode === "survival") {
+        row.style.display = "flex";
+        for (let i = 0; i < 10; i++) {
+          const img = document.createElement("img");
+          const v = armorPts - i * 2;
+          img.src = v >= 2 ? this.armorIcons.full : v >= 1 ? this.armorIcons.half : this.armorIcons.empty;
+          el.appendChild(img);
+        }
+      } else {
+        row.style.display = "none";
+      }
+    }
+  }
+
+  // 睡眠渐变: 变黑 → 回调(跳时间) → 变亮
+  showSleepFade(onMid) {
+    const el = this.$("sleep-overlay");
+    el.classList.remove("hidden", "fading-out");
+    // 强制重排以重启过渡
+    void el.offsetWidth;
+    el.classList.add("fading-in");
+    setTimeout(() => {
+      if (onMid) onMid();
+      el.classList.remove("fading-in");
+      el.classList.add("fading-out");
+      setTimeout(() => {
+        el.classList.add("hidden");
+        el.classList.remove("fading-out");
+      }, 1250);
+    }, 1700);
   }
 
   damageFlash() {
@@ -220,6 +265,8 @@ class UI {
     this.showScreen("death-screen");
     // 死亡时掉落合成格与鼠标物品
     this.dropCraftAndCursor();
+    // 释放鼠标锁定, 否则重生按钮无法点击
+    if (this.onDeathShow) this.onDeathShow();
   }
 
   dropCraftAndCursor() {
@@ -260,6 +307,7 @@ class UI {
     if (name === "inventory") this.showScreen("inventory-screen");
     else if (name === "table") this.showScreen("table-screen");
     else if (name === "furnace") this.showScreen("furnace-screen");
+    else if (name === "chest") this.showScreen("chest-screen");
     if (this.onScreenOpen) this.onScreenOpen();
   }
 
@@ -270,13 +318,27 @@ class UI {
     this.openScreen("furnace");
   }
 
+  openChest(x, y, z) {
+    this.chestKey = `${x},${y},${z}`;
+    let c = G.world.blockEntities.get(this.chestKey);
+    if (!c || c.type !== "chest") {
+      c = { type: "chest", items: new Array(27).fill(null), facing: 2 };
+      G.world.blockEntities.set(this.chestKey, c);
+    }
+    Sound.chestOpen();
+    this.openScreen("chest");
+  }
+
   closeScreen(silent = false) {
     if (!this.openName) return;
+    const wasChest = this.openName === "chest";
     // 归还合成格物品
     this.returnCraftItems();
     this.openName = null;
     this.furnaceKey = null;
+    this.chestKey = null;
     this._furnEls = null;
+    if (wasChest) Sound.chestClose();
     this.hideAllScreens();
     this.hideTooltip();
     if (!silent) {
@@ -452,6 +514,7 @@ class UI {
     this.showCursorItem();
     this.renderActiveScreen();
     this.refreshHotbar();
+    this.updateHud();
   }
 
   // ==================== 合成 ====================
@@ -513,6 +576,8 @@ class UI {
       this.renderCraftPanel("table-panel", 3);
     } else if (this.openName === "furnace") {
       this.renderFurnacePanel();
+    } else if (this.openName === "chest") {
+      this.renderChestPanel();
     }
   }
 
@@ -568,6 +633,33 @@ class UI {
       }
     }
 
+    // 箱子界面: 移入箱子
+    if (this.openName === "chest") {
+      const c = this.currentChest();
+      if (c) {
+        const max = ITEMS[s.id].stack;
+        for (let j = 0; j < 27; j++) {
+          const t = c.items[j];
+          if (t && t.id === s.id && t.count < max) {
+            const take = Math.min(max - t.count, s.count);
+            t.count += take; s.count -= take;
+            if (s.count <= 0) { inv.slots[i] = null; return; }
+          }
+        }
+        for (let j = 0; j < 27; j++) {
+          if (!c.items[j]) { c.items[j] = s; inv.slots[i] = null; return; }
+        }
+      }
+    }
+
+    // 盔甲快速穿戴
+    const armorDef = ITEMS[s.id] && ITEMS[s.id].armor;
+    if (armorDef && !G.player.armor[armorDef.slot]) {
+      G.player.armor[armorDef.slot] = s;
+      inv.slots[i] = null;
+      return;
+    }
+
     if (i < 9) this.moveRange(inv, i, 9, 36);
     else this.moveRange(inv, i, 0, 9);
   }
@@ -601,6 +693,29 @@ class UI {
     const grid = size === 3 ? this.craft3 : this.craft2;
     const row = document.createElement("div");
     row.className = "inv-craft-row";
+
+    // 盔甲槽 (仅生存背包)
+    if (size === 2) {
+      const armorCol = document.createElement("div");
+      armorCol.className = "inv-grid";
+      armorCol.style.gridTemplateColumns = "44px";
+      armorCol.style.gridTemplateRows = "repeat(4, 44px)";
+      armorCol.style.marginRight = "14px";
+      for (let i = 0; i < 4; i++) {
+        armorCol.appendChild(this.makeSlot({
+          get: () => G.player.armor[i],
+          set: (v) => { G.player.armor[i] = v; },
+          canPut: (s) => !!(ITEMS[s.id] && ITEMS[s.id].armor && ITEMS[s.id].armor.slot === i),
+          quickMove: () => {
+            const s = G.player.armor[i];
+            if (!s) return;
+            const remain = G.player.inventory.giveItem(s.id, s.count);
+            G.player.armor[i] = remain > 0 ? { ...s, count: remain } : null;
+          },
+        }));
+      }
+      row.appendChild(armorCol);
+    }
 
     const gridEl = document.createElement("div");
     gridEl.className = "inv-grid";
@@ -806,6 +921,47 @@ class UI {
     }
   }
 
+  // ==================== 箱子 ====================
+  currentChest() {
+    if (!G.world || !this.chestKey) return null;
+    const c = G.world.blockEntities.get(this.chestKey);
+    return (c && c.type === "chest") ? c : null;
+  }
+
+  renderChestPanel() {
+    const c = this.currentChest();
+    if (!c) { this.closeScreen(); return; }
+    const panel = this.$("chest-panel");
+    panel.innerHTML = "";
+
+    const title = document.createElement("h3");
+    title.textContent = "箱子";
+    panel.appendChild(title);
+
+    const grid = document.createElement("div");
+    grid.className = "inv-grid";
+    grid.style.gridTemplateColumns = "repeat(9, 44px)";
+    for (let i = 0; i < 27; i++) {
+      grid.appendChild(this.makeSlot({
+        get: () => c.items[i],
+        set: (v) => { c.items[i] = v; },
+        quickMove: () => {
+          const s = c.items[i];
+          if (!s) return;
+          const remain = G.player.inventory.giveItem(s.id, s.count);
+          c.items[i] = remain > 0 ? { ...s, count: remain } : null;
+        },
+      }));
+    }
+    panel.appendChild(grid);
+
+    const sp = document.createElement("div");
+    sp.style.height = "10px";
+    panel.appendChild(sp);
+
+    this.buildPlayerInvSection(panel);
+  }
+
   // ==================== 鼠标物品 / 提示 ====================
   bindCursorFollow() {
     document.addEventListener("mousemove", (e) => {
@@ -854,8 +1010,20 @@ class UI {
       const dur = stack.dur === undefined ? item.tool.durability : stack.dur;
       text += `\n耐久 ${dur} / ${item.tool.durability}`;
     }
+    if (item.armor) {
+      const dur = stack.dur === undefined ? item.armor.durability : stack.dur;
+      text += `\n防御 +${item.armor.defense}  耐久 ${dur} / ${item.armor.durability}`;
+    }
     if (item.food) text += `\n恢复 ${item.food} 点饥饿`;
-    if (item.isBlock && BLOCKS[stack.id] && BLOCKS[stack.id].interact === "furnace") text += "\n右键打开";
+    if (item.plantSeed !== undefined) text += "\n右键播种在耕地上";
+    if (item.boneMeal) text += "\n右键催熟作物";
+    if (item.isBlock && BLOCKS[stack.id]) {
+      const inter = BLOCKS[stack.id].interact;
+      if (inter === "furnace") text += "\n右键打开";
+      else if (inter === "chest") text += "\n右键打开 (27 格)";
+      else if (inter === "door") text += "\n右键开关门";
+      else if (inter === "bed") text += "\n右键睡觉 (夜晚)";
+    }
     const tip = this.$("tooltip");
     tip.textContent = text;
     tip.classList.remove("hidden");
@@ -929,6 +1097,8 @@ class UI {
     this.$("chat-wrap").classList.add("hidden");
     this.$("chat-input").blur();
     this.$("chat-input").value = "";
+    // 聊天结束后重新锁定鼠标(暂停路径由 lockPointer 的 paused 守卫拦下)
+    if (this.onScreenClose) this.onScreenClose();
   }
 
   submitChat() {
@@ -955,10 +1125,22 @@ class UI {
     if (cmd === "help") {
       ok("/gamemode <生存|创造>  切换模式");
       ok("/time set <day|noon|night|midnight|0-24000>");
+      ok("/weather <晴|雨|雷暴>  设置天气");
       ok("/give <物品名> [数量]");
       ok("/tp <x> <y> <z>  传送");
       ok("/spawn 设置重生点  /heal 治疗  /kill 自杀");
       ok("/seed 种子  /clear 清空背包");
+      return;
+    }
+    if (cmd === "weather") {
+      const w = (args[0] || "").toLowerCase();
+      const map = { clear: "clear", rain: "rain", thunder: "thunder", storm: "thunder",
+        晴: "clear", 晴天: "clear", 雨: "rain", 下雨: "rain", 雷雨: "thunder", 雷暴: "thunder" };
+      const mode = map[w] || map[args[0]];
+      if (!mode) { err("用法: /weather <clear|rain|thunder>"); return; }
+      if (!G.sky) { err("当前不可用"); return; }
+      G.sky.setWeather(mode);
+      ok(mode === "clear" ? "天气已设置为晴天" : mode === "rain" ? "天气已设置为雨天" : "天气已设置为雷暴");
       return;
     }
     if (cmd === "gamemode" || cmd === "gm") {
@@ -969,7 +1151,7 @@ class UI {
       if (!mode) { err("用法: /gamemode <survival|creative>"); return; }
       G.mode = mode; p.mode = mode;
       if (mode === "survival") p.flying = false;
-      this._hud.hp = -1; this._hud.hunger = -1; this._hud.air = -1;
+      this._hud.hp = -1; this._hud.hunger = -1; this._hud.air = -1; this._hud.armor = -1;
       this.updateHud();
       ok("已将游戏模式设置为" + (mode === "creative" ? "创造模式" : "生存模式"));
       return;

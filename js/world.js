@@ -111,7 +111,7 @@ class World {
       if (!ed) { ed = new Map(); this.edits.set(k, ed); }
       ed.set((lx * 16 + lz) * WORLD_HEIGHT + wy, id);
     }
-    if (id !== B.FURNACE) this.blockEntities.delete(`${wx},${wy},${wz}`);
+    if (!usesBlockEntity(id)) this.blockEntities.delete(`${wx},${wy},${wz}`);
     c.dirty = true;
     if (lx === 0) this.markDirty(cx - 1, cz);
     if (lx === 15) this.markDirty(cx + 1, cz);
@@ -247,8 +247,19 @@ class World {
 
           if (block.plant) { this.emitCross(buf.cutout, lx, y, lz, block, ox, oz); continue; }
 
+          // 特殊渲染方块(箱子/床/门)
+          if (block.renderType) { this.emitSpecial(buf, lx, y, lz, block, ox, oz); continue; }
+
           const isTrans = block.translucent;      // 水/冰
           const isCut = !block.opaque && !isTrans; // 树叶/玻璃
+
+          // 朝向贴图(熔炉/工作台正面朝向玩家放置方向)
+          let frontFace = null;
+          if (block.tex.front) {
+            const be = this.blockEntities.get(`${ox + lx},${y},${oz + lz}`);
+            const facing = (be && be.facing !== undefined) ? be.facing : 2;
+            frontFace = ["north", "east", "south", "west"][facing];
+          }
 
           for (const f of FACES) {
             const nid = getB(lx + f.dir[0], y + f.dir[1], lz + f.dir[2]);
@@ -259,7 +270,7 @@ class World {
             if (isTrans && nb && nb.plant) { /* 水面贴植物仍显示 */ }
 
             const target = isTrans ? buf.trans : (isCut ? buf.cutout : buf.opaque);
-            const tileName = faceTile(block, f.name);
+            const tileName = (frontFace && f.name === frontFace) ? block.tex.front : faceTile(block, f.name);
             this.emitFace(target, f, lx, y, lz, tileName, isTrans && f.dir[1] === 1, ox, oz);
           }
         }
@@ -342,6 +353,64 @@ class World {
       for (let i = 0; i < 4; i++) buf.c.push(light, light, light);
       buf.i.push(base, base + 1, base + 2, base + 2, base + 1, base + 3);
       buf.n += 4;
+    }
+  }
+
+  // ==================== 特殊形状方块(箱子/床/门) ====================
+  // 自定义包围盒单面发射: corner.pos 的 0/1 映射到 b0/b1
+  emitBoxFace(buf, f, x, y, z, b0, b1, tileName) {
+    const uv = tileUV(TILE[tileName]);
+    const base = buf.n;
+    for (const corner of f.corners) {
+      buf.p.push(
+        x + (corner.pos[0] === 0 ? b0[0] : b1[0]),
+        y + (corner.pos[1] === 0 ? b0[1] : b1[1]),
+        z + (corner.pos[2] === 0 ? b0[2] : b1[2])
+      );
+      buf.u.push(corner.uv[0] ? uv.u1 : uv.u0, corner.uv[1] ? uv.v1 : uv.v0);
+      const l = f.shade;
+      buf.c.push(l, l, l);
+    }
+    const a = base, b = base + 1, c = base + 2, d = base + 3;
+    buf.i.push(a, b, c, c, b, d);
+    buf.n += 4;
+  }
+
+  emitSpecial(buf, x, y, z, block, ox, oz) {
+    const be = this.blockEntities.get(`${ox + x},${y},${oz + z}`);
+    const facing = (be && be.facing !== undefined) ? be.facing : 2;   // 0北 1东 2南 3西
+    const T = 3 / 16;
+
+    if (block.renderType === "chest") {
+      // 内缩 14/16 箱体
+      const b0 = [1 / 16, 0, 1 / 16], b1 = [15 / 16, 14 / 16, 15 / 16];
+      const frontName = ["north", "east", "south", "west"][facing];
+      for (const f of FACES) {
+        const tile = f.name === frontName ? "chest_front"
+          : (f.name === "top" || f.name === "bottom") ? "chest_top" : "chest_side";
+        this.emitBoxFace(buf.opaque, f, x, y, z, b0, b1, tile);
+      }
+    } else if (block.renderType === "bed") {
+      // 半高床体
+      const b0 = [0, 0, 0], b1 = [1, 9 / 16, 1];
+      for (const f of FACES) {
+        const tile = f.name === "top" ? "bed_top" : f.name === "bottom" ? "planks" : "bed_side";
+        this.emitBoxFace(buf.opaque, f, x, y, z, b0, b1, tile);
+      }
+    } else if (block.renderType === "door") {
+      // 薄门板: 关闭时贴 facing 对侧边缘, 打开时转到侧面
+      let b0, b1;
+      if (!block.doorOpen) {
+        if (facing === 0) { b0 = [0, 0, 0]; b1 = [1, 1, T]; }
+        else if (facing === 2) { b0 = [0, 0, 1 - T]; b1 = [1, 1, 1]; }
+        else if (facing === 3) { b0 = [0, 0, 0]; b1 = [T, 1, 1]; }
+        else { b0 = [1 - T, 0, 0]; b1 = [1, 1, 1]; }
+      } else {
+        if (facing === 0 || facing === 2) { b0 = [0, 0, 0]; b1 = [T, 1, 1]; }
+        else { b0 = [0, 0, 0]; b1 = [1, 1, T]; }
+      }
+      const tile = block.doorHalf === 0 ? "door_bottom" : "door_top";
+      for (const f of FACES) this.emitBoxFace(buf.opaque, f, x, y, z, b0, b1, tile);
     }
   }
 }

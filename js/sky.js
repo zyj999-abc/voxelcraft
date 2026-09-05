@@ -60,9 +60,53 @@ class Sky {
     this.skyNight = new THREE.Color(0.015, 0.02, 0.05);
     this.skySunset = new THREE.Color(1.0, 0.48, 0.22);
     this._skyColor = new THREE.Color();
+    this._rainGray = new THREE.Color(0.38, 0.42, 0.5);
 
     scene.fog = new THREE.Fog(0x87ceeb, 10, 100);
     this._underwater = false;
+
+    // ==================== 天气 ====================
+    this.weather = "clear";            // clear | rain
+    this.weatherTimer = 240 + Math.random() * 360;
+    this.rainIntensity = 0;            // 0..1 平滑过渡
+    this.thunderTimer = 12 + Math.random() * 20;
+    this._flashT = 0;
+    this._rainSoundT = 0;
+    this._snowMode = false;
+    this._weatherChat = false;
+
+    // 雨丝 (线段)
+    const RN = 500;
+    this._rainCount = RN;
+    const rainPos = new Float32Array(RN * 6);
+    this._rainSpeeds = new Float32Array(RN);
+    for (let i = 0; i < RN; i++) {
+      const x = (Math.random() - 0.5) * 38, y = Math.random() * 30, z = (Math.random() - 0.5) * 38;
+      rainPos[i * 6] = x; rainPos[i * 6 + 1] = y; rainPos[i * 6 + 2] = z;
+      rainPos[i * 6 + 3] = x; rainPos[i * 6 + 4] = y + 0.75; rainPos[i * 6 + 5] = z;
+      this._rainSpeeds[i] = 15 + Math.random() * 9;
+    }
+    this.rainGeo = new THREE.BufferGeometry();
+    this.rainGeo.setAttribute("position", new THREE.BufferAttribute(rainPos, 3));
+    this.rainMat = new THREE.LineBasicMaterial({
+      color: 0x9fb8d8, transparent: true, opacity: 0.4, fog: false, depthWrite: false,
+    });
+    this.rain = new THREE.LineSegments(this.rainGeo, this.rainMat);
+    this.rain.visible = false;
+    this.rain.frustumCulled = false;
+    this.rain.renderOrder = 8;
+    scene.add(this.rain);
+
+    // 雪花 (点)
+    this.snowMat = new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.14, transparent: true, opacity: 0.85,
+      fog: false, depthWrite: false, sizeAttenuation: true,
+    });
+    this.snow = new THREE.Points(this.rainGeo, this.snowMat);
+    this.snow.visible = false;
+    this.snow.frustumCulled = false;
+    this.snow.renderOrder = 8;
+    scene.add(this.snow);
   }
 
   makeGlowTexture(core, edge) {
@@ -95,13 +139,19 @@ class Sky {
     this._skyColor.copy(this.skyNight).lerp(this.skyDay, daylight);
     const sunsetAmt = Math.max(0, 1 - Math.abs(elev) / 0.22) * 0.55;
     if (sunsetAmt > 0) this._skyColor.lerp(this.skySunset, sunsetAmt);
+    // 天气: 天空变灰
+    if (this.rainIntensity > 0.01) {
+      this._skyColor.lerp(this._rainGray, this.rainIntensity * 0.7 * daylight);
+    }
     // 注意: 不能用 scene.background(Color) — 那样每次 render() 都会 forceClear,
     // 手持物第二遍渲染时会清掉地形。改用 clear color + autoClear=false 的手动清屏。
     this.scene.background = null;
     if (G.renderer) G.renderer.setClearColor(this._skyColor, 1);
 
-    // 光照
-    const light = 0.24 + 0.76 * daylight;
+    // 光照 (雨天变暗 + 雷闪提亮)
+    let light = 0.24 + 0.76 * daylight;
+    light *= 1 - 0.32 * this.rainIntensity;
+    if (this._flashT > 0) light = Math.min(1.15, light + this._flashT * 1.8);
     this.daylight = light;
 
     // 天体旋转 (太阳东升西落)
@@ -138,6 +188,126 @@ class Sky {
       this.scene.fog.near = 0.1;
       this.scene.fog.far = 14;
     }
+  }
+
+  // ==================== 天气 ====================
+  isRaining() { return this.rainIntensity > 0.35; }
+  isThundering() { return this.weather === "rain" && this.rainIntensity > 0.5; }
+
+  clearWeather() {
+    this.weather = "clear";
+    this.rainIntensity = 0;
+    this._flashT = 0;
+    this.weatherTimer = 240 + Math.random() * 360;
+  }
+
+  // 设置天气: "clear" | "rain" | "thunder" (雷暴=立即满强度+尽快打雷)
+  setWeather(mode) {
+    if (mode === "clear") { this.clearWeather(); return; }
+    this.weather = "rain";
+    this.weatherTimer = 180 + Math.random() * 120;
+    if (mode === "thunder") {
+      this.rainIntensity = 1;
+      this.thunderTimer = 1.5;
+    } else {
+      this.thunderTimer = 25 + Math.random() * 35;
+    }
+  }
+
+  updateWeather(dt, camPos) {
+    // 状态切换
+    this.weatherTimer -= dt;
+    if (this.weatherTimer <= 0) {
+      if (this.weather === "clear") {
+        this.weather = "rain";
+        this.weatherTimer = 60 + Math.random() * 150;
+        this.thunderTimer = 4 + Math.random() * 10;
+        if (G.ui) G.ui.addChat(this._snowMode ? "下雪了…" : "下雨了…");
+      } else {
+        this.weather = "clear";
+        this.weatherTimer = 240 + Math.random() * 360;
+        if (G.ui) G.ui.addChat("雨停了。");
+      }
+    }
+
+    // 强度平滑过渡
+    const target = this.weather === "rain" ? 1 : 0;
+    const rate = 0.22;
+    this.rainIntensity += clamp(target - this.rainIntensity, -rate * dt, rate * dt);
+
+    if (this.rainIntensity < 0.02) {
+      this.rain.visible = false;
+      this.snow.visible = false;
+      if (this._flashT > 0) this._flashT -= dt;
+      return;
+    }
+
+    // 雪地判定 (针叶林 / 高山雪线)
+    let snowNow = false;
+    if (G.world && G.world.gen) {
+      const bx = Math.floor(camPos.x), bz = Math.floor(camPos.z);
+      const biome = G.world.gen.biomeAt(bx, bz);
+      if (biome === BIOME.TAIGA) snowNow = true;
+      else if (biome === BIOME.MOUNTAIN && G.world.gen.heightAt(bx, bz) > 74) snowNow = true;
+    }
+    this._snowMode = snowNow;
+
+    // 粒子更新
+    const active = this._snowMode ? this.snow : this.rain;
+    const inactive = this._snowMode ? this.rain : this.snow;
+    inactive.visible = false;
+    active.visible = true;
+
+    const posAttr = this.rainGeo.attributes.position;
+    const arr = posAttr.array;
+    const time = performance.now() * 0.001;
+    for (let i = 0; i < this._rainCount; i++) {
+      if (this._snowMode) {
+        const vi = (1.4 + this._rainSpeeds[i] * 0.05) * dt;
+        const dx = Math.sin(time * 1.2 + i * 0.7) * dt * 0.5;
+        arr[i * 6] += dx;
+        arr[i * 6 + 1] -= vi;
+        // 雪花: 第二顶点重合避免 Points 双重渲染
+        arr[i * 6 + 3] = arr[i * 6];
+        arr[i * 6 + 4] = arr[i * 6 + 1];
+        arr[i * 6 + 5] = arr[i * 6 + 2];
+      } else {
+        const vi = this._rainSpeeds[i] * dt;
+        arr[i * 6 + 1] -= vi;
+        // 雨丝: 保持竖直 streak
+        arr[i * 6 + 3] = arr[i * 6];
+        arr[i * 6 + 4] = arr[i * 6 + 1] + 0.75;
+        arr[i * 6 + 5] = arr[i * 6 + 2];
+      }
+      if (arr[i * 6 + 1] < camPos.y - 13) {
+        const x = camPos.x + (Math.random() - 0.5) * 38;
+        const y = camPos.y + 9 + Math.random() * 18;
+        const z = camPos.z + (Math.random() - 0.5) * 38;
+        arr[i * 6] = x; arr[i * 6 + 1] = y; arr[i * 6 + 2] = z;
+        arr[i * 6 + 3] = x; arr[i * 6 + 4] = y + 0.75; arr[i * 6 + 5] = z;
+      }
+    }
+    posAttr.needsUpdate = true;
+    this.rainMat.opacity = 0.42 * this.rainIntensity;
+    this.snowMat.opacity = 0.85 * this.rainIntensity;
+
+    // 雨声循环
+    if (!this._snowMode) {
+      this._rainSoundT -= dt;
+      if (this._rainSoundT <= 0) {
+        this._rainSoundT = 1.7;
+        Sound.rainAmbient();
+      }
+      // 雷暴
+      this.thunderTimer -= dt;
+      if (this.thunderTimer <= 0) {
+        this.thunderTimer = 10 + Math.random() * 28;
+        this._flashT = 0.42;
+        Sound.thunder();
+        if (G.ui) G.ui.shake(0.45, 0.06);
+      }
+    }
+    if (this._flashT > 0) this._flashT -= dt;
   }
 
   rebuildClouds(camPos) {

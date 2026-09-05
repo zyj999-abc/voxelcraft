@@ -396,6 +396,89 @@ function buildBlockTiles() {
     }
   });
 
+  // --- 箱子 ---
+  defTile("chest_top", (s, r) => {
+    fillNoise(s, r, "#8a6a35", 0.08);
+    for (let i = 0; i < 16; i++) { s(i, 0, "#5a4419"); s(i, 15, "#5a4419"); s(0, i, "#5a4419"); s(15, i, "#5a4419"); }
+    for (let i = 2; i < 14; i++) { s(i, 2, "#6b511f"); s(i, 13, "#6b511f"); s(2, i, "#6b511f"); s(13, i, "#6b511f"); }
+  });
+  defTile("chest_side", (s, r) => {
+    fillNoise(s, r, "#8a6a35", 0.08);
+    for (let i = 0; i < 16; i++) { s(i, 0, "#5a4419"); s(i, 15, "#5a4419"); s(0, i, "#5a4419"); s(15, i, "#5a4419"); }
+    for (let x = 1; x < 15; x++) s(x, 5, "#6b511f");  // 箱盖缝
+  });
+  defTile("chest_front", (s, r) => {
+    fillNoise(s, r, "#8a6a35", 0.08);
+    for (let i = 0; i < 16; i++) { s(i, 0, "#5a4419"); s(i, 15, "#5a4419"); s(0, i, "#5a4419"); s(15, i, "#5a4419"); }
+    for (let x = 1; x < 15; x++) s(x, 5, "#6b511f");
+    // 锁扣
+    for (let y = 4; y < 8; y++) for (let x = 7; x < 9; x++) s(x, y, "#3a3a3a");
+    s(7, 4, "#8f8f8f"); s(8, 4, "#8f8f8f");
+  });
+  // --- 床 ---
+  defTile("bed_top", (s, r) => {
+    fillNoise(s, r, "#b02e26", 0.1);           // 红色被褥
+    for (let x = 0; x < 16; x++) s(x, 6, "#8a1f1a");  // 折线
+    for (let x = 0; x < 16; x++) s(x, 7, "#8a1f1a");
+    for (let i = 0; i < 16; i++) { s(i, 0, "#f0f0f0"); s(i, 1, "#f0f0f0"); s(i, 2, "#e0e0e0"); } // 枕头
+    for (let i = 0; i < 16; i++) { s(0, i, "#5a4419"); s(15, i, "#5a4419"); } // 木框
+  });
+  defTile("bed_side", (s, r) => {
+    for (let y = 4; y < 9; y++) for (let x = 0; x < 16; x++) s(x, y, shadeColor("#b02e26", 1 + (r() - 0.5) * 0.15));
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 16; x++) s(x, y, shadeColor("#9c7f4e", 0.95 + r() * 0.1));
+    for (let y = 9; y < 16; y++) for (let x = 0; x < 16; x++) s(x, y, shadeColor("#9c7f4e", 0.95 + r() * 0.1));
+    for (let x = 0; x < 16; x++) s(x, 8, "#6b511f");
+  });
+  // --- 门 (上下两半) ---
+  defTile("door_bottom", (s, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 3; x < 13; x++) s(x, y, shadeColor("#8a6a35", 0.95 + (r() - 0.5) * 0.15));
+    for (let i = 0; i < 16; i++) { s(3, i, "#5a4419"); s(12, i, "#5a4419"); }
+    // 嵌板
+    for (let i = 5; i < 11; i++) { s(i, 3, "#6b511f"); s(i, 12, "#6b511f"); }
+    for (let i = 3; i < 13; i++) { s(5, i, "#6b511f"); s(10, i, "#6b511f"); }
+  });
+  defTile("door_top", (s, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 3; x < 13; x++) s(x, y, shadeColor("#8a6a35", 0.95 + (r() - 0.5) * 0.15));
+    for (let i = 0; i < 16; i++) { s(3, i, "#5a4419"); s(12, i, "#5a4419"); }
+    // 玻璃窗
+    for (let y = 3; y < 9; y++) for (let x = 5; x < 11; x++)
+      s(x, y, (x === 5 || x === 10 || y === 3 || y === 8) ? "#5a4419" : shadeColor("#9fc3f5", 0.9 + r() * 0.2));
+  });
+  // --- 耕地 ---
+  defTile("farmland", (s, r) => {
+    fillSpeckle(s, r, "#6b4a2e", "#5a3d24", 0.15, 0.5);
+    // 沟垄
+    for (let y = 1; y < 16; y += 4) for (let x = 0; x < 16; x++) s(x, y, "#4a3018");
+  });
+  defTile("farmland_side", (s, r) => {
+    fillSpeckle(s, r, "#8b6547", "#79553a", 0.18, 0.5);
+    for (let x = 0; x < 16; x++) {
+      const h = 2 + Math.floor(r() * 2);
+      for (let y = 0; y < h; y++) s(x, y, shadeColor("#6b4a2e", 1 + (r() - 0.5) * 0.15));
+    }
+  });
+  // --- 小麦 3 阶段 ---
+  const wheatTile = (name, height, color) => defTile(name, (s, r) => {
+    const stalks = [1, 4, 7, 10, 13];
+    for (const x0 of stalks) {
+      for (let y = 15; y > 15 - height; y--) {
+        const xx = clamp(x0 + Math.round((15 - y) * (r() - 0.5) * 0.5), 0, 15);
+        s(xx, y, shadeColor(color, 0.85 + r() * 0.3));
+      }
+      if (height >= 10) { // 抽穗
+        for (let k = 0; k < 3; k++) {
+          const yy = 15 - height + k, spread = k;
+          s(x0 - spread, yy, shadeColor("#d8b84a", 0.9 + r() * 0.2));
+          s(x0 + spread, yy, shadeColor("#d8b84a", 0.9 + r() * 0.2));
+        }
+        s(x0, 15 - height - 1, "#e8cc6a");
+      }
+    }
+  });
+  wheatTile("wheat_0", 4, "#4a8a2e");
+  wheatTile("wheat_1", 8, "#6aa83e");
+  wheatTile("wheat_2", 12, "#8ab84e");
+
   // --- 破坏裂纹 10 阶段 ---
   for (let stage = 0; stage < 10; stage++) {
     defTile("crack_" + stage, (s, r) => {
@@ -420,9 +503,10 @@ const PALETTE = {
   "w": "#6b511f", "W": "#8a6f42",
   "k": "#1c1c1c", "K": "#3a3a3a",
   "g": "#5a9c2e", "r": "#d43a2c", "R": "#a02818",
-  "y": "#f5d93f", "o": "#ff9d2e",
+  "y": "#f5d93f", "Y": "#c8a020", "o": "#ff9d2e", "O": "#c8741e",
   "p": "#e89a9a", "P": "#c87070", "c": "#c85540", "C": "#8a4a30",
-  "s": "#f0f0f0", "b": "#3f66d4",
+  "s": "#f0f0f0", "S": "#ffffff", "b": "#3f66d4",
+  "n": "#a06a3a", "N": "#7a4a24", "G": "#3e7a1f",
 };
 
 const ART = {
@@ -496,6 +580,240 @@ const ART = {
     "w..wW...........",
     "..wW............",
     ".ww.............",
+    "................",
+  ],
+  hoe: [
+    "................",
+    "....######......",
+    "..##++++++#.....",
+    "..#+##...+#.....",
+    "..#+#....##.....",
+    "..#+#..ww.......",
+    "..##.wwWw.......",
+    "....wwWw........",
+    "...wwWw.........",
+    "..wwWw..........",
+    ".wwWw...........",
+    ".ww.............",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  seeds: [
+    "................",
+    "................",
+    "................",
+    "....g..g..g.....",
+    "...gG.gG.gG.....",
+    "....g..g..g.....",
+    "................",
+    "..g..g..g..g....",
+    ".gG.gG.gG.gG....",
+    "..g..g..g..g....",
+    "................",
+    "....g..g..g.....",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  wheat: [
+    "................",
+    "....y..y..y.....",
+    "...yY.yY.yY.....",
+    "..yYy.yYy.yYy...",
+    "...yY.yY.yY.....",
+    "....y..y..y.....",
+    "...yY.yY.yY.....",
+    "..yYy.yYy.yYy...",
+    "....w..w..w.....",
+    "....w..w..w.....",
+    "....w..w..w.....",
+    "....w..w..w.....",
+    "....w..w..w.....",
+    "................",
+    "................",
+    "................",
+  ],
+  bread: [
+    "................",
+    "................",
+    "....######......",
+    "..##oooooo##....",
+    ".#ooCCooCCoo#...",
+    ".#oooooooooo#...",
+    "#ooCCooooCCoo#..",
+    "#oooooooooooo#..",
+    "#ooCCooooCCoo#..",
+    ".#oooooooooo#...",
+    "..##oooooo##....",
+    "....######......",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  leather: [
+    "................",
+    "................",
+    "....######......",
+    "..##nnnnnn##....",
+    ".#nnnnnnnnnn#...",
+    "#nnNNnnnnNNnn#..",
+    "#nnnnnnnnnnnn#..",
+    "#nnNNnnnnNNnn#..",
+    "#nnnnnnnnnnnn#..",
+    ".#nnnnnnnnnn#...",
+    "..##nnnnnn##....",
+    "....######......",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  feather: [
+    "................",
+    "..........ww....",
+    ".........wWw....",
+    "........wWWw....",
+    ".......wWWWw....",
+    "......wWWWWw....",
+    ".....wWWWWw.....",
+    ".....wWWWw......",
+    "....wWWWw.......",
+    "....wWWw........",
+    "...wWWw.........",
+    "...wWw..........",
+    "..ww............",
+    "..w.............",
+    "................",
+    "................",
+  ],
+  bone: [
+    "................",
+    "............ss..",
+    "...........sSs..",
+    "..........sSs...",
+    ".........sSs....",
+    "........sSs.....",
+    ".......sSs......",
+    "......sSs.......",
+    ".....sSs........",
+    "....sSs.........",
+    "...sSs..........",
+    "..sSs...........",
+    "..sSs...........",
+    "...ss...........",
+    "................",
+    "................",
+  ],
+  arrow: [
+    "................",
+    "..........##....",
+    ".........#kk#...",
+    "........#kk#....",
+    ".......#kk#.....",
+    "......wkk#......",
+    ".....wWkk#......",
+    "....wWwkk#......",
+    "...wWw.kk#......",
+    "..wWw..kk#......",
+    ".wWw...kk#......",
+    ".ww....kk#......",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  bone_meal: [
+    "................",
+    "................",
+    "....######......",
+    "..##ssssss##....",
+    ".#ssSssssSss#...",
+    ".#ssssssssss#...",
+    "#ssSssssssSss#..",
+    "#ssssssssssss#..",
+    "#ssSssssssSss#..",
+    ".#ssssssssss#...",
+    "..##ssssss##....",
+    "....######......",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  helmet: [
+    "................",
+    "................",
+    "...##########...",
+    "..#++++++++++#..",
+    ".#++########++#.",
+    ".#+#........#+#.",
+    ".#+#........#+#.",
+    ".#+#........#+#.",
+    ".###........###.",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  chestplate: [
+    "................",
+    ".##..........##.",
+    ".#+#........#+#.",
+    ".#+##......###+#",
+    ".#+++#....#+++#.",
+    ".#+++++++++++#..",
+    ".#+++++++++++#..",
+    ".#++#++++#+++#..",
+    ".#++#++++#+++#..",
+    ".###++++++###...",
+    "....######......",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  leggings: [
+    "................",
+    "...##########...",
+    "..#++++++++++#..",
+    ".#++++++++++++#.",
+    ".#++++++#+++++#.",
+    ".#++++++#+++++#.",
+    ".#++++++#+++++#.",
+    ".#+++++##+++++#.",
+    ".#+++++#..#+++#.",
+    ".#++++#....#++#.",
+    ".#####......###.",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+  ],
+  boots: [
+    "................",
+    "................",
+    "................",
+    "..###......###..",
+    "..#+#......#+#..",
+    "..#+#......#+#..",
+    "..#+#......#+#..",
+    "..#+##.....#+##.",
+    "..#+###....#+###",
+    "..#++++#...#+++#",
+    "..######...#####",
+    "................",
+    "................",
+    "................",
+    "................",
     "................",
   ],
   stick: [
@@ -689,10 +1007,11 @@ function buildItemIcons() {
     GOLD: ["#f0c832", "#fbe88c", "#c8a020"],
     DIAMOND: ["#3fd8c8", "#9ff8ec", "#2aa89c"],
   };
-  const types = { PICK: "pickaxe", AXE: "axe", SHOVEL: "shovel", SWORD: "sword" };
+  const types = { PICK: "pickaxe", AXE: "axe", SHOVEL: "shovel", SWORD: "sword", HOE: "hoe" };
   for (const mk of ["WOOD", "STONE", "IRON", "GOLD", "DIAMOND"]) {
-    for (const tk of ["PICK", "AXE", "SHOVEL", "SWORD"]) {
-      ICONS[I[mk + "_" + tk]] = makeArtIcon(ART[types[tk]], ...mats[mk]);
+    for (const tk of ["PICK", "AXE", "SHOVEL", "SWORD", "HOE"]) {
+      const id = I[mk + "_" + tk];
+      if (id !== undefined) ICONS[id] = makeArtIcon(ART[types[tk]], ...mats[mk]);
     }
   }
   // 材料
@@ -703,6 +1022,23 @@ function buildItemIcons() {
   ICONS[I.GOLD_INGOT] = makeArtIcon(ART.ingot, "#f0c832", "#fbe88c", "#c8a020");
   ICONS[I.DIAMOND] = makeArtIcon(ART.diamond, "#3fd8c8", "#9ff8ec", "#2aa89c");
   ICONS[I.APPLE] = makeArtIcon(ART.apple, "#d43a2c", "#e85a4a", "#a02818");
+  // 农产品
+  const mkFlatArt = (art) => {
+    const cv = document.createElement("canvas");
+    cv.width = 32; cv.height = 32;
+    const ctx = cv.getContext("2d");
+    ctx.imageSmoothingEnabled = false;
+    drawPixelArt(ctx, art, "#000", "#000", "#000", 2, 0, 0);
+    return cv;
+  };
+  ICONS[I.SEEDS] = mkFlatArt(ART.seeds);
+  ICONS[I.WHEAT] = mkFlatArt(ART.wheat);
+  ICONS[I.BREAD] = mkFlatArt(ART.bread);
+  ICONS[I.LEATHER] = mkFlatArt(ART.leather);
+  ICONS[I.FEATHER] = mkFlatArt(ART.feather);
+  ICONS[I.BONE] = mkFlatArt(ART.bone);
+  ICONS[I.ARROW] = mkFlatArt(ART.arrow);
+  ICONS[I.BONE_MEAL] = mkFlatArt(ART.bone_meal);
   // 肉排: 生/熟 换色
   const mkMeat = (light, mid, dark) => {
     const cv = document.createElement("canvas");
@@ -721,12 +1057,31 @@ function buildItemIcons() {
   };
   ICONS[I.PORKCHOP] = mkMeat("#e89a9a", "#d47070", "#b05050");
   ICONS[I.COOKED_PORKCHOP] = mkMeat("#c88a50", "#a86a38", "#8a5228");
+  ICONS[I.BEEF] = mkMeat("#c85050", "#a83838", "#802828");
+  ICONS[I.COOKED_BEEF] = mkMeat("#8a5230", "#6a3a20", "#4a2815");
+  ICONS[I.CHICKEN_RAW] = mkMeat("#f0c8b0", "#d4a888", "#b08868");
+  ICONS[I.COOKED_CHICKEN] = mkMeat("#d8a050", "#b88030", "#986020");
+  ICONS[I.MUTTON_RAW] = mkMeat("#d86868", "#b85050", "#983838");
+  ICONS[I.COOKED_MUTTON] = mkMeat("#b06838", "#905028", "#703818");
+  // 盔甲
+  const armorMats = {
+    LEATHER: ["#a06a3a", "#c08553", "#7a4a24"],
+    IRON: ["#d8d8d8", "#f0f0f0", "#a8a8a8"],
+  };
+  const armorArts = ["helmet", "chestplate", "leggings", "boots"];
+  for (const mk of ["LEATHER", "IRON"]) {
+    armorArts.forEach((art, i) => {
+      const id = I[mk + "_" + ["HELMET", "CHESTPLATE", "LEGGINGS", "BOOTS"][i]];
+      if (id !== undefined) ICONS[id] = makeArtIcon(ART[art], ...armorMats[mk]);
+    });
+  }
 
   // 方块物品
   for (let id = 1; id < BLOCKS.length; id++) {
-    if (!BLOCKS[id]) continue;
+    if (!BLOCKS[id] || ITEMS[id] === undefined) continue;
     const b = BLOCKS[id];
     if (b.plant) ICONS[id] = makeFlatIcon(b.tex.all);
+    else if (b.renderType === "door") ICONS[id] = makeFlatIcon(b.doorHalf === 0 ? "door_bottom" : "door_top");
     else ICONS[id] = makeBlockIcon(id);
   }
 }
@@ -805,6 +1160,35 @@ function makeBubbleIcon() {
       ctx.fillStyle = (x < 7 && y < 7) ? "#cfe8ff" : "#5f9fff";
       ctx.fillRect(x, y, 1, 1);
     }
+  }
+  return cv;
+}
+
+// 盔甲值图标 (胸甲剪影)
+function makeArmorIcon(kind) { // full | half | empty
+  const cv = document.createElement("canvas");
+  cv.width = 18; cv.height = 18;
+  const ctx = cv.getContext("2d");
+  const shape = [
+    ".XX..XX.",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    "XXXXXXXX",
+    ".XXXXXX.",
+    ".XXXXXX.",
+    "..XXXX..",
+  ];
+  for (let y = 0; y < shape.length; y++) for (let x = 0; x < 8; x++) {
+    if (shape[y][x] !== "X") continue;
+    let c = kind === "empty" ? "#22272e" : "#cfd6de";
+    if (kind !== "empty" && y < 2) c = "#eef3f8";
+    ctx.fillStyle = c;
+    ctx.fillRect(1 + x * 2, 1 + y * 2, 2, 2);
+  }
+  if (kind === "half") {
+    ctx.fillStyle = "#22272e";
+    ctx.fillRect(10, 0, 10, 18);
   }
   return cv;
 }
