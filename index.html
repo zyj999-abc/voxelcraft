@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>VoxelCraft - 体素沙盒游戏</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2379a636'/><rect y='10' width='16' height='6' fill='%238b6547'/></svg>">
+</head>
+<body>
+<div id="game-container">
+  <!-- 3D 画布由渲染器动态插入 -->
+
+  <!-- ===================== HUD ===================== -->
+  <div id="hud" class="hidden">
+    <div id="crosshair"></div>
+    <div id="hud-bottom">
+      <div id="status-row">
+        <div id="hearts" class="status-bar"></div>
+        <div id="hunger" class="status-bar"></div>
+      </div>
+      <div id="air-row"><div id="air" class="status-bar"></div></div>
+      <div id="hotbar"></div>
+    </div>
+    <div id="held-item-name"></div>
+  </div>
+
+  <!-- F3 调试 -->
+  <div id="debug-screen" class="hidden"></div>
+
+  <!-- 聊天 -->
+  <div id="chat-area"></div>
+  <div id="chat-wrap" class="hidden">
+    <input id="chat-input" type="text" maxlength="120" autocomplete="off" spellcheck="false">
+  </div>
+
+  <!-- 水下滤镜 / 受伤红闪 -->
+  <div id="underwater-overlay" class="hidden"></div>
+  <div id="damage-overlay"></div>
+
+  <!-- ===================== 标题画面 ===================== -->
+  <div id="title-screen" class="screen">
+    <div class="title-inner">
+      <div id="logo-wrap">
+        <h1 id="game-logo">VOXEL<span>CRAFT</span></h1>
+        <div id="splash">100% 原创!</div>
+      </div>
+      <div class="menu-buttons">
+        <button class="mc-btn" id="btn-play">开始游戏</button>
+        <button class="mc-btn" id="btn-settings-title">设 置</button>
+        <button class="mc-btn" id="btn-about">关 于</button>
+      </div>
+      <div id="title-footer">
+        <span>VoxelCraft 1.0 — 纯前端体素沙盒</span>
+        <span>原创实现 · 与 Mojang 无关</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 关于 -->
+  <div id="about-screen" class="screen hidden">
+    <div class="panel">
+      <h2>关于 VoxelCraft</h2>
+      <p>VoxelCraft 是一款完全运行在浏览器中的体素沙盒游戏，灵感来自经典沙盒玩法。</p>
+      <p>全部代码与材质均为原创、程序化生成，不包含任何官方游戏资源，与 Mojang / Microsoft 无关。</p>
+      <p class="dim">技术栈：原生 JavaScript + Three.js (WebGL)</p>
+      <button class="mc-btn" id="btn-about-back">返 回</button>
+    </div>
+  </div>
+
+  <!-- 世界列表 -->
+  <div id="world-screen" class="screen hidden">
+    <div class="panel wide">
+      <h2>选择世界</h2>
+      <div id="world-list"></div>
+      <div class="divider"></div>
+      <div id="new-world-form">
+        <h3>创建新的世界</h3>
+        <div class="form-row"><label>世界名称</label><input id="world-name" type="text" maxlength="24" value="新的世界"></div>
+        <div class="form-row"><label>种子(可留空)</label><input id="world-seed" type="text" maxlength="24" placeholder="随机"></div>
+        <div class="form-row">
+          <label>游戏模式</label>
+          <div class="segmented">
+            <button class="seg-btn active" data-mode="survival">生存模式</button>
+            <button class="seg-btn" data-mode="creative">创造模式</button>
+          </div>
+        </div>
+        <button class="mc-btn primary" id="btn-create-world">创建世界</button>
+      </div>
+      <button class="mc-btn" id="btn-world-back">返 回</button>
+    </div>
+  </div>
+
+  <!-- 加载 -->
+  <div id="loading-screen" class="screen hidden">
+    <div class="loading-inner">
+      <h2 id="loading-title">正在生成世界…</h2>
+      <div class="progress-outer"><div id="progress-bar"></div></div>
+      <p id="loading-tip" class="dim">正在铺设基岩…</p>
+    </div>
+  </div>
+
+  <!-- 暂停 -->
+  <div id="pause-screen" class="screen hidden translucent">
+    <div class="menu-buttons">
+      <h2 class="pause-title">游戏菜单</h2>
+      <button class="mc-btn" id="btn-resume">回到游戏</button>
+      <button class="mc-btn" id="btn-settings-pause">设 置</button>
+      <button class="mc-btn" id="btn-quit">保存并退出到标题</button>
+    </div>
+  </div>
+
+  <!-- 设置 -->
+  <div id="settings-screen" class="screen hidden translucent">
+    <div class="panel">
+      <h2>设置</h2>
+      <div class="form-row"><label>渲染距离: <span id="rd-val"></span> 区块</label><input id="opt-renderdist" type="range" min="2" max="8" step="1"></div>
+      <div class="form-row"><label>视野(FOV): <span id="fov-val"></span>°</label><input id="opt-fov" type="range" min="60" max="110" step="1"></div>
+      <div class="form-row"><label>音量: <span id="vol-val"></span>%</label><input id="opt-volume" type="range" min="0" max="100" step="5"></div>
+      <div class="form-row"><label>音乐</label><div class="segmented" id="opt-music"><button class="seg-btn" data-v="on">开</button><button class="seg-btn" data-v="off">关</button></div></div>
+      <div class="form-row"><label>视角摇晃</label><div class="segmented" id="opt-bob"><button class="seg-btn" data-v="on">开</button><button class="seg-btn" data-v="off">关</button></div></div>
+      <div class="controls-help">
+        <h3>操作说明</h3>
+        <div class="controls-grid">
+          <span>W A S D</span><span>移动</span>
+          <span>空格</span><span>跳跃 / (双击)切换飞行</span>
+          <span>Shift</span><span>潜行 / 飞行下降</span>
+          <span>Ctrl / 双击W</span><span>疾跑</span>
+          <span>鼠标左键</span><span>破坏方块 / 攻击</span>
+          <span>鼠标右键</span><span>放置方块 / 使用</span>
+          <span>鼠标中键</span><span>选取方块(创造)</span>
+          <span>滚轮 / 1-9</span><span>切换快捷栏</span>
+          <span>E</span><span>物品栏</span>
+          <span>Q</span><span>丢弃物品</span>
+          <span>T / /</span><span>聊天 / 命令</span>
+          <span>F3</span><span>调试信息</span>
+          <span>F11</span><span>全屏</span>
+          <span>ESC</span><span>暂停</span>
+        </div>
+      </div>
+      <button class="mc-btn" id="btn-settings-back">完 成</button>
+    </div>
+  </div>
+
+  <!-- 背包 / 创造物品栏 -->
+  <div id="inventory-screen" class="screen hidden translucent">
+    <div class="inv-panel" id="inv-panel"></div>
+  </div>
+
+  <!-- 工作台 -->
+  <div id="table-screen" class="screen hidden translucent">
+    <div class="inv-panel" id="table-panel"></div>
+  </div>
+
+  <!-- 熔炉 -->
+  <div id="furnace-screen" class="screen hidden translucent">
+    <div class="inv-panel" id="furnace-panel"></div>
+  </div>
+
+  <!-- 死亡 -->
+  <div id="death-screen" class="screen hidden">
+    <div class="death-inner">
+      <h1>你死了!</h1>
+      <p id="death-cause" class="dim"></p>
+      <button class="mc-btn" id="btn-respawn">重生</button>
+      <button class="mc-btn" id="btn-death-title">回到标题画面</button>
+    </div>
+  </div>
+
+  <!-- toast -->
+  <div id="toast"></div>
+  <!-- 物品提示 -->
+  <div id="tooltip" class="hidden"></div>
+  <!-- 鼠标跟随物品 -->
+  <div id="cursor-item" class="hidden"></div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="js/constants.js"></script>
+<script src="js/noise.js"></script>
+<script src="js/blocks.js"></script>
+<script src="js/textures.js"></script>
+<script src="js/worldgen.js"></script>
+<script src="js/world.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/sky.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/inventory.js"></script>
+<script src="js/player.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/save.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
